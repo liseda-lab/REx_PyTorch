@@ -191,7 +191,7 @@ def main(label_file, ontology_label_file, ncit_pickle, chebi_pickle):
 
 if __name__ == "__main__":
     main('graph_labels.tsv', 'onto_labels.json', 'NCIT_HETIONET_DAG.pkl', 'CHEBI_HETIONET_DAG.pkl')
-    #Note
+    #Note - we cannot include the actual files in the repo due to size but can share upon request. 
     # The DAG files are the dataset with mappings for an ontology in DAG form with only subclass relations.
     # graph_labels.tsv contains the labels for the dataset
     # onto_labels.json contains the labels for the ontologies 

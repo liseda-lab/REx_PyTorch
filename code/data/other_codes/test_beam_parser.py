@@ -67,49 +67,7 @@ class TestBeamParser:
         return  types
     
     
-    # def _parse_score_and_method(self, method_line: str) -> Tuple[float, str, Dict[str, float]]:
-    #     """
-    #     Parse the score method line to extract score value, method type, and sub-scores.
-    #     Returns: (final_score, method_type, sub_scores_dict)
-    #     """
-    #     sub_scores = {}
-        
-    #     if method_line.strip().lower() == "llm":
-    #         return None, "llm", {}
-        
-    #     if '(llm)' in method_line.lower():
-    #         # Parse format like "0.6667 (llm) v:3 c_conv:5 r:3"
-    #         match = re.match(r'([\d.]+)', method_line.strip())
-    #         if match:
-    #             score_value = float(match.group(1))
-                
-    #             # Extract sub-scores
-    #             # v:X for validity
-    #             v_match = re.search(r'v:(\d+)', method_line)
-    #             if v_match:
-    #                 sub_scores['validity'] = float(v_match.group(1))
-                
-    #             # c_conv:X for completeness
-    #             c_match = re.search(r'c_conv:(\d+)', method_line)
-    #             if c_match:
-    #                 sub_scores['completeness'] = float(c_match.group(1))
-                
-    #             # r:X for relevance
-    #             r_match = re.search(r'r:(\d+)', method_line)
-    #             if r_match:
-    #                 sub_scores['relevance'] = float(r_match.group(1))
-                
-    #             return score_value, "llm", sub_scores
-    #         return 0.0, "llm", {}
-        
-    #     # Parse standard format like "0.1000 (low_fixed)"
-    #     match = re.match(r'([\d.]+)\s*\(([\w_]+)\)', method_line.strip())
-    #     if match:
-    #         score_value = float(match.group(1))
-    #         method = match.group(2)
-    #         return score_value, method, {}
-        
-    #     return 0.0, "none", {}
+
     def _parse_score_and_method(self, method_line: str) -> Tuple[float, str, Dict[str, float]]:
         """
         Parse the score method line to extract score value, method type, and sub-scores.
@@ -457,57 +415,6 @@ class LCAFinder:
             ]
         
         return result
-
-
-# def main():
-#     import argparse
-    
-#     parser = argparse.ArgumentParser(description="Parse test beam output files")
-#     parser.add_argument("input", type=Path, help="Input test beam file")
-#     parser.add_argument("--nodes-tsv", type=Path, required=True, help="Node labels TSV")
-#     parser.add_argument("--edges-tsv", type=Path, required=True, help="Edge labels TSV")
-#     parser.add_argument("--enable-lca", action="store_true", help="Enable LCA computation")
-#     parser.add_argument("--ncit-pickle", type=Path, help="NCIT DAG pickle")
-#     parser.add_argument("--chebi-pickle", type=Path, help="CHEBI DAG pickle")
-#     parser.add_argument("--onto-labels", type=Path, help="Ontology labels JSON")
-#     parser.add_argument("--output", type=Path, help="Output JSON file")
-    
-#     args = parser.parse_args()
-    
-#     beam_parser = TestBeamParser(
-#         nodes_tsv=args.nodes_tsv,
-#         edges_tsv=args.edges_tsv,
-#         enable_lca=args.enable_lca,
-#         ncit_pickle=args.ncit_pickle,
-#         chebi_pickle=args.chebi_pickle,
-#         ontology_labels=args.onto_labels
-#     )
-    
-#     print(f"Parsing {args.input}...")
-#     results = beam_parser.parse_file(args.input)
-    
-#     # Count methods
-#     method_counts = defaultdict(int)
-#     for pair in results['pairs']:
-#         for path in pair['paths']:
-#             if 'reasoning' in path:
-#                 method = path['reasoning'].replace('Path extracted using ', '').replace(' method', '')
-#                 method_counts[method] += 1
-    
-#     print(f"\nParsing complete:")
-#     print(f"  Total pairs: {len(results['pairs'])}")
-#     print(f"  Total paths: {sum(len(p['paths']) for p in results['pairs'])}")
-#     print(f"\nMethod distribution:")
-#     for method, count in sorted(method_counts.items()):
-#         print(f"  {method}: {count}")
-    
-#     output_path = args.output or args.input.with_suffix('.json')
-#     with output_path.open('w', encoding='utf-8') as f:
-#         json.dump(results, f, indent=2, ensure_ascii=False)
-    
-#     print(f"\nOutput saved to: {output_path}")
-
-
 
 
 def main():

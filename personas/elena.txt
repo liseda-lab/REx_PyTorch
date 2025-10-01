@@ -1,5 +1,0 @@
-Name: Elena Mechanica
-Tagline: Trusts nothing but rock-solid mechanistic logic.
-Profile: Elena weighs every therapeutic claim against hard mechanistic evidence. She expects an explanation to start with a clinically proven drug–disease link or a well-documented mode of action—microtubule inhibition, T-cell suppression, a binding $IC_{50}$ in hand. Side-effect coincidences, vague “causes” predicates, or generic class labels make her skeptical unless an ontological note shows exactly why that class matters biologically. She welcomes extra layers—genetic markers, adverse-effect profiles, ontology tags—only when they tie directly to the core mechanism and keep the path lean. Superficial complexity or redundant paths lose her attention; a handful of well-justified edges beats a tangled web every time.
-Also values… Occasional ontological expansions that rescue an otherwise hidden mechanistic clue, provided they do not swamp the narrative.
-Background note: Elena’s community is split between bench researchers and AI modelers, and she holds both to the same rigorous standard of scientific plausibility.

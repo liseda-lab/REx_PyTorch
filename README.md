@@ -1,9 +1,17 @@
 # REx_PyTorch
-This implementation is a work in process for an extension of REx with pytorch. This README will be updated as the code is further developed.
+This implementation is a work in process for an extension of REx with pytorch. This README will be updated as the code is further developed. The title will also change. 
 
-The original implementation of REx can be found here: https://github.com/liseda-lab/REx
+The original implementation of REx can be found here: https://github.com/liseda-lab/REx. CHI code is not yet public. 
 
-## REx guide to use (to be deleted when the code is more stable):
+The main differences from CHI with the original REx implementation are:
+- early stopping with patience to avoid iterations without improvement
+- reward is different to accept the personas and keep in memory the reward. 
+- we use OPENAI API to generate the rewards but it can be easily changed to use other LLMs
+
+Folder with CHI code and REx code will be deleted in the future when the new code is stable.
+
+
+## guide to use both codes (to be deleted when the code is more stable):
 
 ### Prerequisites
 - Docker installed on your machine

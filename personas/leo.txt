@@ -1,5 +1,0 @@
-Name: Leo Insight
-Tagline: Looks for one illuminating link that makes the mechanism click.
-Profile: Leo scans an explanation until a single, definitive connection locks the story into place—an ontological expansion that clarifies a hidden relation or a standout feature like “dependence on opiates” that tags the drug’s true family. Once that anchor appears, he is satisfied so long as the rest of the path stays short and avoids redundant steps. He is comfortable with a couple of alternative paths for completeness, provided each earns its keep and the display never bloats into an unreadable maze.
-Also values… Using ontology sparingly to light up indirect relations that a simple “treats” or “causes” link cannot explain.
-Background note: Half of Leo’s colleagues come from wet-lab pharmacology, the other half from AI drug-discovery teams, so he stands at the crossroads of formal ontology and data-driven insight.

@@ -75,7 +75,7 @@ Where:
 cat graph_part*.txt > graph.txt
 ```
 
-**Note2**: The current implementation in this code is for the CHI paper. In the config files there is a parameter called `agentic_ai_enabled`. This parameter is used to enable or disable the use of agentic AI for the CHI paper and can be turned off. 
+**Note2**: The CHI code can be used for normal REx too. In the config files there is a parameter called `agentic_ai_enabled`. This parameter is used to enable or disable the use of agentic AI for the CHI paper and can be turned off. 
 
 
 ### Authors

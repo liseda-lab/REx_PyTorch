@@ -31,7 +31,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 #os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import numpy as np
 
-from code.model.environment import env, Episode, threshold_for_step 
+from code.model.environment import env, Episode, threshold_for_step # -- NEW 
 
 
 def trim_and_rank_batch(entity_traj, relation_traj, log_probs, end_entities, batch_size, K):
@@ -106,7 +106,7 @@ class Trainer(object):
         self.rev_entity_vocab = self.train_environment.grapher.rev_entity_vocab
         self.max_hits_at_10 = 0 # Track max hits at 10
         
-        # early stopping variables 
+        # NEW Add early stopping variables 
         self.best_metric = -1  # Track best MRR
         self.early_stopping = False
         self.waiting_period = 3  # Stop if no improvement for 3 evaluations
@@ -613,7 +613,7 @@ class Trainer(object):
 
             # Process final rewards from environment
            # rewards = episode.get_reward_weights_sigmoid()  
-            rewards = episode.get_reward_agenticAI() 
+            rewards = episode.get_reward_agenticAI() # -- NEW 
             #print(rewards)
             reward_reshape = rewards.reshape((temp_batch_size, self.test_rollouts))
             # reshape and sort on the *frozen* full‐log_probs
@@ -798,7 +798,7 @@ class Trainer(object):
         #     self.max_hits_at_10 = final_rewards["Hits@10"]
         #     self.save_path = self.model_saver.save(sess, self.model_dir + "model" + '.ckpt')
 
-        #EARLY STOP EVALUATION
+        #NEW WITH EARLY STOP EAVALUATION
         if save_model:
                 current_metric = final_rewards["MRR"]  # Use MRR as the metric
                 
@@ -809,6 +809,7 @@ class Trainer(object):
                     self.max_hits_at_10 = final_rewards["Hits@10"]  # Keep existing logic
                     logger.info(f"[IMPROVE] New best MRR: {current_metric:.4f} at iteration {self.batch_counter}")
                     
+                    # >>> NEW: write sidecar next to the checkpoint <<<
                     try:
                         meta = {
                             "best_step": int(self.batch_counter),
@@ -967,6 +968,7 @@ if __name__ == '__main__':
         trainer.test_environment.test_rollouts = 100
 
 
+        ##-- NEW 
         # Infer directory and read sidecar
         ckpt_dir = os.path.dirname(save_path)
         sidecar = os.path.join(ckpt_dir, "best_ckpt.json")

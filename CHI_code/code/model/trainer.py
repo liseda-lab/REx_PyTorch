@@ -7,7 +7,9 @@ import time
 import os
 import logging
 import numpy as np
-import tensorflow as tf
+import torch
+import torch.nn as nn
+import torch.nn.functional as nnf
 from code.model.agent import Agent
 from code.options import read_options
 from code.model.environment import env
@@ -21,7 +23,7 @@ from scipy.special import logsumexp as lse
 import shutil
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
-tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+#tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR) 
 
 from torch.utils.tensorboard import SummaryWriter
 
@@ -95,6 +97,10 @@ def configure_logger(log_file_path):
 class Trainer(object):
     def __init__(self, params, tensorboard_dir):
         for key, val in params.items(): setattr(self, key, val); 
+
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        logger.info(f"Using device: {self.device}")
+
         self.agent = Agent(params) 
         self.set_random_seed(self.seed) # set random seed for reproducibility
         self.save_path = None
@@ -118,7 +124,9 @@ class Trainer(object):
 
         # Initialize baseline for reward adjustment and optimizer
         self.baseline = ReactiveBaseline(l=self.Lambda)
-        self.optimizer = tf.train.AdamOptimizer(self.learning_rate)
+        self.optimizer = torch.optim.Adam(self.agent.parameters(), lr=self.learning_rate) # //NOTE: before we didnt pass parameters to the optimizer
+
+        self.global_step_tensor = 0  # Track global step for learning rate decay
 
         self.tensorboard_dir = tensorboard_dir
 
@@ -131,7 +139,8 @@ class Trainer(object):
         """
         if seed is not None:
             os.environ['PYTHONHASHSEED'] = str(seed)  # Fix hash-based randomness
-            tf.random.set_random_seed(seed)
+            torch.manual_seed(seed)
+            torch.cuda.manual_seed(seed)
             np.random.seed(seed)
             random.seed(seed)  # Python's random seed
             logger.info(f"Random seeds set to {seed}")
@@ -174,30 +183,40 @@ class Trainer(object):
 
         groups.setdefault(start_name, {}).setdefault(end_name, []).append(entry)
 
-    def calc_reinforce_loss(self):
+    def calc_reinforce_loss(self, per_example_loss, per_example_logits, cum_discounted_reward):
         """
         Compute the REINFORCE loss with baseline and entropy regularization
         """
 
         # Stack losses across all time steps
-        loss = tf.stack(self.per_example_loss, axis=1)  # [B, T]
+        #loss = tf.stack(self.per_example_loss, axis=1)  # [B, T]
+        loss = torch.stack(per_example_loss, axis=1) # [B, T]
 
         # Compute the baseline value for reward adjustment
-        self.tf_baseline = self.baseline.get_baseline_value()
+        baseline = self.baseline.get_baseline_value()
+        baseline = torch.tensor(baseline, dtype=torch.float32, device=self.device)
 
         # Compute reward difference from baseline and normalize
-        final_reward = self.cum_discounted_reward - self.tf_baseline
-        reward_mean, reward_var = tf.nn.moments(final_reward, axes=[0, 1]) # normalize 
+        final_reward = cum_discounted_reward - baseline
+        reward_mean = torch.mean(final_reward) # NOTE: use just python functions?
+        #reward_mean = final_reward.mean()
+        #reward_std = final_reward.std() + 1e-6 # stability adjustment
         # Constant added for numerical stability
-        reward_std = tf.sqrt(reward_var) + 1e-6 # stability adjustment
-        final_reward = tf.div(final_reward - reward_mean, reward_std)
+        reward_std = torch.std(final_reward) + 1e-6 # stability adjustment
+        final_reward = torch.div(final_reward - reward_mean, reward_std)
 
         # Adjust loss using the normalized reward
-        loss = tf.multiply(loss, final_reward)  # [B, T]
-        self.loss_before_reg = loss
+        #loss = torch.mul(loss, final_reward)  # [B, T]
+        loss = loss * final_reward  # [B, T]
+        #loss = torch.mul(loss, final_reward)  # [B, T]
+        self.loss_before_reg = loss # NOTE: check if this is necessary
+
+        decaying_beta = self.beta * (0.90 ** (self.global_step_tensor / 200))
 
         # Add entropy regularization to encourage exploration
-        total_loss = tf.reduce_mean(loss) - self.decaying_beta * self.entropy_reg_loss(self.per_example_logits) 
+        #total_loss = tf.reduce_mean(loss) - self.decaying_beta * self.entropy_reg_loss(self.per_example_logits) 
+        #total_loss = torch.mean(loss) - decaying_beta * self.entropy_reg_loss(per_example_logits)
+        total_loss = loss.mean() - decaying_beta * self.entropy_reg_loss(per_example_logits)
 
         return total_loss
 
@@ -205,126 +224,114 @@ class Trainer(object):
         """
         Compute the entropy regularization loss to encourage exploration
         """
-        all_logits = tf.stack(all_logits, axis=2)  
-        entropy_policy = - tf.reduce_mean(
-            tf.reduce_sum(tf.multiply(tf.exp(all_logits), all_logits), axis=1)
-            )  # Negative entropy
+        all_logits = torch.stack(all_logits, axis=2)  
+        entropy_policy = - torch.mean(
+            torch.sum(torch.exp(all_logits) * all_logits, dim=1)
+        )  # Negative entropy
         return entropy_policy
 
-    def initialize(self, restore=None, sess=None):
-        """
-        Initialize the TensorFlow computation graph and initializes variables. 
-        """
+    # def initialize(self, restore=None, sess=None):
+    #     """
+    #     Initialize the TensorFlow computation graph and initializes variables. 
+    #     """
 
-        logger.info("Creating TF graph...")
+    #     logger.info("Creating TF graph...")
 
-        # Create placeholders for inputs at each time step
-        self.candidate_relation_sequence = []
-        self.candidate_entity_sequence = []
-        self.next_weights_sequence = [] # Placeholder for edge weights
-        self.input_path = []
-        self.first_state_of_test = tf.placeholder(tf.bool, name="is_first_state_of_test")
-        self.query_relation = tf.placeholder(tf.int32, [None], name="query_relation")
-        self.range_arr = tf.placeholder(tf.int32, shape=[None, ])
-        self.global_step = tf.Variable(0, trainable=False)
-        self.decaying_beta = tf.train.exponential_decay(self.beta, self.global_step,
-                                                   200, 0.90, staircase=False)
-        self.entity_sequence = []
-        self.cum_discounted_reward = tf.placeholder(tf.float32, [None, self.path_length],
-                                                    name="cumulative_discounted_reward")
+    #     # Create placeholders for inputs at each time step
+    #     self.candidate_relation_sequence = []
+    #     self.candidate_entity_sequence = []
+    #     self.next_weights_sequence = [] # Placeholder for edge weights
+    #     self.input_path = []
+    #     self.first_state_of_test = tf.placeholder(tf.bool, name="is_first_state_of_test")
+    #     self.query_relation = tf.placeholder(tf.int32, [None], name="query_relation")
+    #     self.range_arr = tf.placeholder(tf.int32, shape=[None, ])
+    #     self.global_step = tf.Variable(0, trainable=False)
+    #     self.decaying_beta = tf.train.exponential_decay(self.beta, self.global_step,
+    #                                                200, 0.90, staircase=False)
+    #     self.entity_sequence = []
+    #     self.cum_discounted_reward = tf.placeholder(tf.float32, [None, self.path_length],
+    #                                                 name="cumulative_discounted_reward")
 
-        # Placeholder definitions for each step in the path
-        for t in range(self.path_length):
-            next_possible_relations = tf.placeholder(tf.int32, [None, self.max_num_actions],
-                                                   name="next_relations_{}".format(t))
-            next_possible_entities = tf.placeholder(tf.int32, [None, self.max_num_actions],
-                                                     name="next_entities_{}".format(t))
+    #     # Placeholder definitions for each step in the path
+    #     for t in range(self.path_length):
+    #         next_possible_relations = tf.placeholder(tf.int32, [None, self.max_num_actions],
+    #                                                name="next_relations_{}".format(t))
+    #         next_possible_entities = tf.placeholder(tf.int32, [None, self.max_num_actions],
+    #                                                  name="next_entities_{}".format(t))
 
-            next_weights = tf.placeholder(tf.float32, [None, self.max_num_actions], # Placeholder for edge weights
-                                                        name="next_weights_{}".format(t))
+    #         next_weights = tf.placeholder(tf.float32, [None, self.max_num_actions], # Placeholder for edge weights
+    #                                                     name="next_weights_{}".format(t))
 
-            input_label_relation = tf.placeholder(tf.int32, [None], name="input_label_relation_{}".format(t))
-            start_entities = tf.placeholder(tf.int32, [None, ])
-            self.input_path.append(input_label_relation)
-            self.candidate_relation_sequence.append(next_possible_relations)
-            self.candidate_entity_sequence.append(next_possible_entities)
-            self.entity_sequence.append(start_entities)
-            self.next_weights_sequence.append(next_weights) # Append edge weights
-            self.loss_before_reg = tf.constant(0.0)
-
-
-        # Compute losses and logits for all steps
-        self.per_example_loss, self.per_example_logits, self.action_idx = self.agent(
-            self.candidate_relation_sequence,
-            self.candidate_entity_sequence, 
-            self.entity_sequence,
-            self.next_weights_sequence, # Add edge weights
-            self.input_path,
-            self.query_relation, 
-            self.range_arr,
-            self.first_state_of_test, 
-            self.path_length
-            )
+    #         input_label_relation = tf.placeholder(tf.int32, [None], name="input_label_relation_{}".format(t))
+    #         start_entities = tf.placeholder(tf.int32, [None, ])
+    #         self.input_path.append(input_label_relation)
+    #         self.candidate_relation_sequence.append(next_possible_relations)
+    #         self.candidate_entity_sequence.append(next_possible_entities)
+    #         self.entity_sequence.append(start_entities)
+    #         self.next_weights_sequence.append(next_weights) # Append edge weights
+    #         self.loss_before_reg = tf.constant(0.0)
 
 
-        # Compute the REINFORCE loss
-        self.loss_op = self.calc_reinforce_loss()
+    #     # Compute losses and logits for all steps
+    #     self.per_example_loss, self.per_example_logits, self.action_idx = self.agent(
+    #         self.candidate_relation_sequence,
+    #         self.candidate_entity_sequence, 
+    #         self.entity_sequence,
+    #         self.next_weights_sequence, # Add edge weights
+    #         self.input_path,
+    #         self.query_relation, 
+    #         self.range_arr,
+    #         self.first_state_of_test, 
+    #         self.path_length
+    #         )
 
-        # Define brackpropagation operation
-        self.train_op = self.bp(self.loss_op)
 
-        # Build the test graph
-        self.prev_state = tf.placeholder(tf.float32, self.agent.get_mem_shape(), name="memory_of_agent")
-        self.prev_relation = tf.placeholder(tf.int32, [None, ], name="previous_relation")
-        self.query_embedding = tf.nn.embedding_lookup(self.agent.relation_lookup_table, self.query_relation)  # [B, 2D]
-        layer_state = tf.unstack(self.prev_state, self.LSTM_layers)
-        formated_state = [tf.unstack(s, 2) for s in layer_state]
-        self.next_relations = tf.placeholder(tf.int32, shape=[None, self.max_num_actions])
-        self.next_entities = tf.placeholder(tf.int32, shape=[None, self.max_num_actions])
+    #     # Compute the REINFORCE loss
+    #     self.loss_op = self.calc_reinforce_loss()
 
-        self.current_entities = tf.placeholder(tf.int32, shape=[None,])
+    #     # Define brackpropagation operation
+    #     self.train_op = self.bp(self.loss_op)
 
-        with tf.variable_scope("policy_steps_unroll") as scope:
-            scope.reuse_variables()
-            self.test_loss, test_state, self.test_logits, self.test_action_idx, self.chosen_relation = self.agent.step(
-                self.next_relations, self.next_entities, self.next_weights_sequence[0], formated_state, self.prev_relation, self.query_embedding,
-                self.current_entities, self.input_path[0], self.range_arr, self.first_state_of_test)
-            self.test_state = tf.stack(test_state)
+    #     # Build the test graph
+    #     self.prev_state = tf.placeholder(tf.float32, self.agent.get_mem_shape(), name="memory_of_agent")
+    #     self.prev_relation = tf.placeholder(tf.int32, [None, ], name="previous_relation")
+    #     self.query_embedding = tf.nn.embedding_lookup(self.agent.relation_lookup_table, self.query_relation)  # [B, 2D]
+    #     layer_state = tf.unstack(self.prev_state, self.LSTM_layers)
+    #     formated_state = [tf.unstack(s, 2) for s in layer_state]
+    #     self.next_relations = tf.placeholder(tf.int32, shape=[None, self.max_num_actions])
+    #     self.next_entities = tf.placeholder(tf.int32, shape=[None, self.max_num_actions])
 
-        logger.info('TF Graph creation done..')
-        self.model_saver = tf.train.Saver(max_to_keep=2)
+    #     self.current_entities = tf.placeholder(tf.int32, shape=[None,])
 
-        # Return the variable initializer or restore the model
-        if not restore:
-            return tf.global_variables_initializer()
-        else:
-            return  self.model_saver.restore(sess, restore)
+    #     with tf.variable_scope("policy_steps_unroll") as scope:
+    #         scope.reuse_variables()
+    #         self.test_loss, test_state, self.test_logits, self.test_action_idx, self.chosen_relation = self.agent.step(
+    #             self.next_relations, self.next_entities, self.next_weights_sequence[0], formated_state, self.prev_relation, self.query_embedding,
+    #             self.current_entities, self.input_path[0], self.range_arr, self.first_state_of_test)
+    #         self.test_state = tf.stack(test_state)
 
-    def initialize_pretrained_embeddings(self, sess):
-        """
-        Initialize the agent's embeddings with pretrained embeddings
-        """
-        if self.pretrained_embeddings_action != '':
-            embeddings = np.loadtxt(open(self.pretrained_embeddings_action))
-            _ = sess.run((self.agent.relation_embedding_init),
-                         feed_dict={self.agent.action_embedding_placeholder: embeddings})
-        if self.pretrained_embeddings_entity != '':
-            embeddings = np.loadtxt(open(self.pretrained_embeddings_entity))
-            _ = sess.run((self.agent.entity_embedding_init),
-                         feed_dict={self.agent.entity_embedding_placeholder: embeddings})
+    #     logger.info('TF Graph creation done..')
+    #     self.model_saver = tf.train.Saver(max_to_keep=2)
 
-    def bp(self, cost):
-        """
-        Backpropagation operation
-        """
-        self.baseline.update(tf.reduce_mean(self.cum_discounted_reward))
-        tvars = tf.trainable_variables()
-        grads = tf.gradients(cost, tvars)
-        grads, _ = tf.clip_by_global_norm(grads, self.grad_clip_norm)
-        train_op = self.optimizer.apply_gradients(zip(grads, tvars))
-        with tf.control_dependencies([train_op]):  
-            self.dummy = tf.constant(0)
-        return train_op
+    #     # Return the variable initializer or restore the model
+    #     if not restore:
+    #         return tf.global_variables_initializer()
+    #     else:
+    #         return  self.model_saver.restore(sess, restore)
+
+    # def initialize_pretrained_embeddings(self, sess):
+    #     """
+    #     Initialize the agent's embeddings with pretrained embeddings
+    #     """
+    #     if self.pretrained_embeddings_action != '':
+    #         embeddings = np.loadtxt(open(self.pretrained_embeddings_action))
+    #         _ = sess.run((self.agent.relation_embedding_init),
+    #                      feed_dict={self.agent.action_embedding_placeholder: embeddings})
+    #     if self.pretrained_embeddings_entity != '':
+    #         embeddings = np.loadtxt(open(self.pretrained_embeddings_entity))
+    #         _ = sess.run((self.agent.entity_embedding_init),
+    #                      feed_dict={self.agent.entity_embedding_placeholder: embeddings})
+
 
     def calc_cum_discounted_reward(self, rewards):
         """
@@ -336,91 +343,97 @@ class Trainer(object):
         """
         running_add = np.zeros([rewards.shape[0]])  # [B]
         cum_disc_reward = np.zeros([rewards.shape[0], self.path_length])  # [B, T]
-        cum_disc_reward[:,
-        self.path_length - 1] = rewards  # set the last time step to the reward received at the last state
+        cum_disc_reward[:, self.path_length - 1] = rewards  # set the last time step to the reward received at the last state
         for t in reversed(range(self.path_length)):
             running_add = self.gamma * running_add + cum_disc_reward[:, t]
             cum_disc_reward[:, t] = running_add
         return cum_disc_reward
-
-    def gpu_io_setup(self):
-        """
-        Setup the partial run for the GPU
-        """
-
-        # create fetches for partial_run_setup
-        fetches = self.per_example_loss  + self.action_idx + [self.loss_op] + self.per_example_logits + [self.dummy]
-        feeds =  [self.first_state_of_test] + self.candidate_relation_sequence+ self.candidate_entity_sequence + self.input_path + \
-                [self.query_relation] + [self.cum_discounted_reward] + \
-                [self.range_arr] + self.entity_sequence + self.next_weights_sequence # Add edge weights
-
-
-        feed_dict = [{} for _ in range(self.path_length)]
-
-        feed_dict[0][self.first_state_of_test] = False
-        feed_dict[0][self.query_relation] = None
-        feed_dict[0][self.range_arr] = np.arange(self.batch_size*self.num_rollouts)
-        for i in range(self.path_length):
-            feed_dict[i][self.input_path[i]] = np.zeros(self.batch_size * self.num_rollouts)  # placebo
-            feed_dict[i][self.candidate_relation_sequence[i]] = None
-            feed_dict[i][self.candidate_entity_sequence[i]] = None
-            feed_dict[i][self.entity_sequence[i]] = None
-            feed_dict[i][self.next_weights_sequence[i]] = None # Placeholder for edge weights
-
-        return fetches, feeds, feed_dict
-
     
-    def train(self, sess):
+    def train(self):
         """
         Trains the agent using Reinforce on the training environment
         """
-        devices = sess.list_devices()
-        logger.info(f"Devices being used: {devices}")
         print('ENTERING TRAINING LOOP')
-        fetches, feeds, feed_dict = self.gpu_io_setup()
         train_loss = 0.0
         start_time = time.time()
         self.batch_counter = 0
         cumulative_reward = 0
+        # Set pytorch agent to training mode, as it extends nn.Module
+        self.agent.train()
 
-        # Iterate through episodes from the training environment
         for episode in self.train_environment.get_episodes():
             self.batch_counter += 1
             Episode.set_training_step(self.batch_counter)
-            h = sess.partial_run_setup(fetches=fetches, feeds=feeds)
+            self.global_step_tensor = self.batch_counter
 
-            # Initialize query relation and state
-            feed_dict[0][self.query_relation] = episode.get_query_relation()
+            query_relation = torch.tensor(episode.get_query_relation(), 
+                                        dtype=torch.long, device=self.device)
             state = episode.get_state()
 
-            # Process each time step in the episode
-            loss_before_regularization = []
-            logits = []
-            for i in range(self.path_length):
-                feed_dict[i][self.candidate_relation_sequence[i]] = state['next_relations']
-                feed_dict[i][self.candidate_entity_sequence[i]] = state['next_entities']
-                feed_dict[i][self.entity_sequence[i]] = state['current_entities']
-                feed_dict[i][self.next_weights_sequence[i]] = state['weights']
-                per_example_loss, per_example_logits, idx = sess.partial_run(
-                    h, [self.per_example_loss[i], self.per_example_logits[i], self.action_idx[i]],
-                    feed_dict=feed_dict[i])
-                
-                loss_before_regularization.append(per_example_loss)
-                logits.append(per_example_logits)
-                state = episode(idx)
+            range_arr = torch.arange(self.batch_size * self.num_rollouts, 
+                                    dtype=torch.long, device=self.device)
 
-            loss_before_regularization = np.stack(loss_before_regularization, axis=1)
+            prev_relation = torch.full((self.batch_size * self.num_rollouts,), fill_value=self.relation_vocab['DUMMY_START_RELATION'], dtype=torch.long, device=self.device)
+
+            per_example_loss = []
+            per_example_logits = []
+            action_idx_list = []
             
-            # Get rewards and compute cumulative discounted reward
+            for i in range(self.path_length):
+                print(f"Processing step {i}/{self.path_length} of episode {self.batch_counter}")
+                next_relations = torch.tensor(state['next_relations'], 
+                                            dtype=torch.long, device=self.device)
+                next_entities = torch.tensor(state['next_entities'], 
+                                            dtype=torch.long, device=self.device)
+                current_entities = torch.tensor(state['current_entities'], 
+                                               dtype=torch.long, device=self.device)
+                next_weights = torch.tensor(state['weights'], 
+                                           dtype=torch.float32, device=self.device)
+                
+                # Placebo
+                label_action = torch.zeros(self.batch_size * self.num_rollouts,
+                                          dtype=torch.long, device=self.device)
+                
+                loss, logits, action_idx, chosen_relation = self.agent(
+                    next_relations,
+                    next_entities,
+                    current_entities,
+                    next_weights,
+                    label_action,
+                    query_relation,
+                    range_arr,
+                    first_step_of_test=False,
+                    prev_relation=prev_relation
+                )
+
+                per_example_loss.append(loss)
+                per_example_logits.append(logits)
+                action_idx_list.append(action_idx)
+
+                prev_relation = chosen_relation
+
+                # Update the state based on chosen actions
+                idx = action_idx.cpu().numpy()
+                state = episode(idx)
+            
             rewards = episode.get_reward_agenticAI()
             cum_discounted_reward = self.calc_cum_discounted_reward(rewards)
-
-            # Perform backpropagation
-            batch_total_loss, _ = sess.partial_run(h, [self.loss_op, self.dummy],
-                                                feed_dict={self.cum_discounted_reward: cum_discounted_reward})
+            cum_discounted_reward = torch.tensor(cum_discounted_reward, 
+                                                dtype=torch.float32, device=self.device)
+            
+            self.optimizer.zero_grad()
+            total_loss = self.calc_reinforce_loss(per_example_loss, per_example_logits, 
+                                                 cum_discounted_reward)
+            
+            total_loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.agent.parameters(), self.grad_clip_norm)
+            self.optimizer.step()
+            
+            self.baseline.update(cum_discounted_reward.mean().item())
+            
+            batch_total_loss = total_loss.item()
             train_loss = 0.98 * train_loss + 0.02 * batch_total_loss
 
-            # Log statistics
             avg_reward = np.mean(rewards)
             reward_reshape = np.reshape(rewards, (self.batch_size, self.num_rollouts))
             reward_reshape = np.sum(reward_reshape, axis=1)
@@ -431,18 +444,17 @@ class Trainer(object):
             avg_positive_reward = np.mean(rewards[rewards > 0]) if np.any(rewards > 0) else 0.0
             
             logger.info("batch_counter: {0:4d}, num_hits: {1:7.4f}, avg. reward per batch {2:7.4f}, "
-                        "num_ep_correct {3:4d}, avg_ep_correct {4:7.4f}, train loss {5:7.4f}".
-                        format(self.batch_counter, np.sum(rewards), avg_reward, num_ep_correct,
-                            (num_ep_correct / self.batch_size), train_loss))
+                       "num_ep_correct {3:4d}, avg_ep_correct {4:7.4f}, train loss {5:7.4f}".
+                       format(self.batch_counter, np.sum(rewards), avg_reward, num_ep_correct,
+                             (num_ep_correct / self.batch_size), train_loss))
 
-            with self.summary_writer:
-                self.summary_writer.add_scalar('avg_reward_per_batch', avg_reward, self.batch_counter)
-                self.summary_writer.add_scalar('avg_positive_reward', avg_positive_reward, self.batch_counter)
-                self.summary_writer.add_scalar('mean_total_reward', mean_total_reward, self.batch_counter)
-                self.summary_writer.add_scalar('train_loss', train_loss, self.batch_counter)
-                self.summary_writer.add_scalar('avg_ep_correct', (num_ep_correct / self.batch_size), self.batch_counter)
+            self.summary_writer.add_scalar('avg_reward_per_batch', avg_reward, self.batch_counter)
+            self.summary_writer.add_scalar('avg_positive_reward', avg_positive_reward, self.batch_counter)
+            self.summary_writer.add_scalar('mean_total_reward', mean_total_reward, self.batch_counter)
+            self.summary_writer.add_scalar('train_loss', train_loss, self.batch_counter)
+            self.summary_writer.add_scalar('avg_ep_correct', (num_ep_correct / self.batch_size), 
+                                          self.batch_counter)
             
-            # Evaluate model periodically (ONLY ONCE!)
             if self.batch_counter % self.eval_every == 0:
                 with open(self.output_dir + '/scores.txt', 'a') as score_file:
                     score_file.write("Score for iteration " + str(self.batch_counter) + "\n")
@@ -450,26 +462,22 @@ class Trainer(object):
                 os.mkdir(self.path_logger_file + "/" + str(self.batch_counter))
                 self.path_logger_file_ = self.path_logger_file + "/" + str(self.batch_counter) + "/paths"
                 
-                # Test returns MRR now
-                current_mrr = self.test(sess, beam=True, print_paths=False)
+                current_mrr = self.test(beam=True, print_paths=False)
             
-            # Check early stopping
             if self.early_stopping:
                 logger.info(f"[TRAINING STOPPED] Early stopping triggered at iteration {self.batch_counter}")
                 break
             
-            # Check if reached max iterations
             if self.batch_counter >= self.total_iterations:
                 logger.info(f"[TRAINING COMPLETE] Reached maximum iterations: {self.total_iterations}")
                 break
             
             gc.collect()
         
-        # Close summary writer AFTER the loop ends
         self.summary_writer.close()
     
     
-    def test(self, sess, beam=True, print_paths=True, save_model = True, mrr = True):
+    def test(self, beam = True, print_paths = True, save_model = True, mrr = True):
         """
         Tests the trained agent on the test environment.
 
@@ -486,7 +494,7 @@ class Trainer(object):
         batch_counter = 0
         paths = defaultdict(list) # store paths taken by the agent
         answers = [] # store answers for analysis
-        feed_dict = {}
+        #feed_dict = {}
         final_rewards = {
         "Hits@1": 0,
         "Hits@3": 0,
@@ -497,6 +505,9 @@ class Trainer(object):
         }
 
         correct_groups = {}
+
+        # Set our agent to evaluation mode
+        self.agent.eval()
 
 
         print("ENTERING TEST LOOP")
@@ -511,18 +522,21 @@ class Trainer(object):
 
             # Initialize query relation and state
             self.qr = episode.get_query_relation()
-            feed_dict[self.query_relation] = self.qr
+            #self.qr = torch.tensor(episode.get_query_relation(), dtype=torch.long, device=self.device)
+            qr_emb = self.agent.relation_lookup_table(torch.tensor(episode.get_query_relation(), dtype=torch.long, device=self.device))  # [B, 2D]
             beam_probs = np.zeros((temp_batch_size * self.test_rollouts, 1)) # initial beam probs
             state = episode.get_state() # initial state
 
             # Initialize agent memory and previous relation
-            mem = self.agent.get_mem_shape()
-            agent_mem = np.zeros((mem[0], mem[1], temp_batch_size*self.test_rollouts, mem[3]) ).astype('float32')
-            previous_relation = np.ones((temp_batch_size * self.test_rollouts, ), dtype='int64') * self.relation_vocab[
-                'DUMMY_START_RELATION']
-            feed_dict[self.range_arr] = np.arange(temp_batch_size * self.test_rollouts)
-            feed_dict[self.input_path[0]] = np.zeros(temp_batch_size * self.test_rollouts)
-
+            #mem = self.agent.get_mem_shape()
+            #agent_mem = np.zeros((mem[0], mem[1], temp_batch_size*self.test_rollouts, mem[3]) ).astype('float32')
+            agent_mem = self.agent.zero_state(temp_batch_size * self.test_rollouts)
+            #previous_relation = np.ones((temp_batch_size * self.test_rollouts, ), dtype='int64') * self.relation_vocab[
+            #    'DUMMY_START_RELATION']
+            previous_relation = torch.full((temp_batch_size * self.test_rollouts,), 
+                                         fill_value=self.relation_vocab['DUMMY_START_RELATION'], 
+                                         dtype=torch.long, device=self.device)
+            range_arr = torch.arange(temp_batch_size * self.test_rollouts, dtype=torch.long, device=self.device)
 
             # Initialize tracking of visited entities
             visited_entities = np.zeros((temp_batch_size * self.test_rollouts, 1), dtype=np.int32)
@@ -530,7 +544,7 @@ class Trainer(object):
 
             if print_paths:
                 self.entity_trajectory = [] # track entities visited
-                self.relation_trajectory = [] # track relations transversed
+                self.relation_trajectory = [] # track relations traversed
 
             # Initialize log probabilities
             #self.log_probs = np.zeros((temp_batch_size*self.test_rollouts,)) * 1.0
@@ -540,20 +554,22 @@ class Trainer(object):
             # Process each time step in the path
             for i in range(self.path_length):
                 if i == 0: # first state
-                    feed_dict[self.first_state_of_test] = True
+                    first_state_of_test = True
 
-                #Populate feed_dict with the state information
-                feed_dict[self.next_relations] = state['next_relations']
-                feed_dict[self.next_entities] = state['next_entities']
-                feed_dict[self.current_entities] = state['current_entities']
-                feed_dict[self.prev_state] = agent_mem
-                feed_dict[self.prev_relation] = previous_relation
-                feed_dict[self.next_weights_sequence[0]] = state['weights']  # Includes weights
+                next_relations = torch.tensor(state['next_relations'], dtype=torch.long, device=self.device)
+                next_entities = torch.tensor(state['next_entities'], dtype=torch.long, device=self.device)
+                current_entities = torch.tensor(state['current_entities'], dtype=torch.long, device=self.device)
+                next_weights = torch.tensor(state['weights'], dtype=torch.float32, device=self.device)
+                prev_state = torch.tensor(agent_mem, dtype=torch.float32, device=self.device) if isinstance(agent_mem, np.ndarray) else agent_mem
+                prev_relation = previous_relation
+                label_action = torch.zeros(temp_batch_size * self.test_rollouts, dtype=torch.long, device=self.device)
 
                 # Run the agent step
-                loss, agent_mem, test_scores, test_action_idx, chosen_relation = sess.run(
-                    [ self.test_loss, self.test_state, self.test_logits, self.test_action_idx, self.chosen_relation],
-                    feed_dict=feed_dict)
+                loss, agent_mem, test_scores, test_action_idx, chosen_relation = self.agent.step(
+                    next_relations, next_entities, next_weights, prev_state, prev_relation, qr_emb, current_entities,
+                    label_action, range_arr, first_state_of_test)
+                
+                test_scores = test_scores.detach().cpu().numpy()
 
                 # Perform beam search
                 # if active will prioritize actions with higher acummulated scores
@@ -570,8 +586,8 @@ class Trainer(object):
                         idx = self.top_k(new_scores, k) # Get top k indices
 
                     # Update beam information
-                    y = idx//self.max_num_actions
-                    x = idx%self.max_num_actions
+                    y = idx // self.max_num_actions
+                    x = idx % self.max_num_actions
 
                     # SHIFT the environment’s arrays to maintain correct alignment
                     episode.visited_entities = episode.visited_entities[y, :]
@@ -582,9 +598,16 @@ class Trainer(object):
                     state['current_entities'] = state['current_entities'][y]
                     state['next_relations'] = state['next_relations'][y,:]
                     state['next_entities'] = state['next_entities'][y, :]
-                    agent_mem = agent_mem[:, :, y, :]
+                    #agent_mem = agent_mem[:, :, y, :]
+                    # TODO: check if this is correct
+                    h, c = agent_mem
+                    h = h[:, y, :].contiguous()
+                    c = c[:, y, :].contiguous()
+                    agent_mem = (h, c)
+                    
                     test_action_idx = x
                     chosen_relation = state['next_relations'][np.arange(temp_batch_size*k), x]
+                    chosen_relation = torch.tensor(chosen_relation, dtype=torch.long, device=self.device)
                     beam_probs = new_scores[y, x]
                     beam_probs = beam_probs.reshape((-1, 1))
 
@@ -805,7 +828,9 @@ class Trainer(object):
                 if current_metric > self.best_metric:
                     self.best_metric = current_metric
                     self.current_waiting_period = self.waiting_period  # Reset WAITING 
-                    self.save_path = self.model_saver.save(sess, self.model_dir + "model" + '.ckpt')
+                    #self.save_path = self.model_saver.save(sess, self.model_dir + "model" + '.ckpt')
+                    # FIXME: we aren't yet saving models, or loading them later on
+                    self.save_path = self.model_dir
                     self.max_hits_at_10 = final_rewards["Hits@10"]  # Keep existing logic
                     logger.info(f"[IMPROVE] New best MRR: {current_metric:.4f} at iteration {self.batch_counter}")
                     
@@ -926,70 +951,46 @@ if __name__ == '__main__':
     logger.info('Total number of entities {}'.format(len(options['entity_vocab'])))
     logger.info('Total number of relations {}'.format(len(options['relation_vocab'])))
     save_path = ''
-    config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True 
-    config.log_device_placement = False
 
     #TRAINING
-    if not options['load_model']:
-        trainer = Trainer(options, tensorboard_dir=options['tensorboard_dir'])
-        with tf.Session(config=config) as sess:
-            sess.run(trainer.initialize())
-            trainer.initialize_pretrained_embeddings(sess=sess)
-
-            trainer.train(sess)
-            save_path = trainer.save_path
-            path_logger_file = trainer.path_logger_file
-            output_dir = trainer.output_dir
-
-        tf.reset_default_graph()
-
-    #TESTING WITH BEST MODEL ON TEST FILE
-    else:
-        logger.info("Skipping training")
-        logger.info("Loading model from {}".format(options["model_load_dir"]))
-
     trainer = Trainer(options, tensorboard_dir=options['tensorboard_dir'])
-    if options['load_model']:
-        save_path = options['model_load_dir']
-        path_logger_file = trainer.path_logger_file
-        output_dir = trainer.output_dir
+    trainer.train()
+    save_path = trainer.save_path
+    path_logger_file = trainer.path_logger_file
+    output_dir = trainer.output_dir
+    
+    #TESTING
+    trainer.test_rollouts = 100
 
-    with tf.Session(config=config) as sess:
-        trainer.initialize(restore=save_path, sess=sess)
+    os.mkdir(path_logger_file + "/" + "test_beam")
+    trainer.path_logger_file_ = path_logger_file + "/" + "test_beam" + "/paths"
+    with open(output_dir + '/scores.txt', 'a') as score_file:
+        score_file.write("Test (beam) scores with best model from " + save_path + "\n")
+    trainer.test_environment = trainer.test_test_environment
+    trainer.test_environment.test_rollouts = 100
 
-        trainer.test_rollouts = 100
+    ##-- NEW 
+    # Infer directory and read sidecar
+    ckpt_dir = os.path.dirname(save_path)
+    sidecar = os.path.join(ckpt_dir, "best_ckpt.json")
 
-        os.mkdir(path_logger_file + "/" + "test_beam")
-        trainer.path_logger_file_ = path_logger_file + "/" + "test_beam" + "/paths"
-        with open(output_dir + '/scores.txt', 'a') as score_file:
-            score_file.write("Test (beam) scores with best model from " + save_path + "\n")
-        trainer.test_environment = trainer.test_test_environment
-        trainer.test_environment.test_rollouts = 100
+    best_step = 0
+    if os.path.exists(sidecar):
+        try:
+            with open(sidecar, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            best_step = int(meta.get("best_step", 0))
+            th = float(meta.get("threshold", threshold_for_step(best_step)))
+            logger.info(f"[TEST] Using best_step={best_step} → threshold={th:.2f} (from {sidecar})")
+        except Exception as e:
+            logger.warning(f"[TEST] Failed to read {sidecar}: {e}; defaulting step=0, threshold={threshold_for_step(0):.2f}")
+    else:
+        logger.warning(f"[TEST] {sidecar} not found; defaulting step=0, threshold={threshold_for_step(0):.2f}")
 
+    # Make the threshold logic in Episode use this step
+    Episode.set_training_step(best_step)
 
-        ##-- NEW 
-        # Infer directory and read sidecar
-        ckpt_dir = os.path.dirname(save_path)
-        sidecar = os.path.join(ckpt_dir, "best_ckpt.json")
-
-        best_step = 0
-        if os.path.exists(sidecar):
-            try:
-                with open(sidecar, "r", encoding="utf-8") as f:
-                    meta = json.load(f)
-                best_step = int(meta.get("best_step", 0))
-                th = float(meta.get("threshold", threshold_for_step(best_step)))
-                logger.info(f"[TEST] Using best_step={best_step} → threshold={th:.2f} (from {sidecar})")
-            except Exception as e:
-                logger.warning(f"[TEST] Failed to read {sidecar}: {e}; defaulting step=0, threshold={threshold_for_step(0):.2f}")
-        else:
-            logger.warning(f"[TEST] {sidecar} not found; defaulting step=0, threshold={threshold_for_step(0):.2f}")
-
-        # Make the threshold logic in Episode use this step
-        Episode.set_training_step(best_step)
-
-        trainer.test(sess, beam=True, print_paths=True, save_model=False)
+    trainer.test(beam = True, print_paths = True, save_model = False)
 
     # Erase empty folders in path_logger_file
     if os.path.isdir(path_logger_file):

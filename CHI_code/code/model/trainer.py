@@ -355,10 +355,11 @@ class Trainer(object):
         start_time = time.time()
         self.batch_counter = 0
         cumulative_reward = 0
-        
+
         # Set our agent to training mode, as it extends nn.Module
         self.agent.train()
 
+        # Iterate through episodes from the training environment
         for episode in self.train_environment.get_episodes():
             self.batch_counter += 1
             Episode.set_training_step(self.batch_counter)
@@ -414,11 +415,13 @@ class Trainer(object):
                 idx = action_idx.cpu().numpy()
                 state = episode(idx)
             
+            # Get rewards and compute cumulative discounted reward
             rewards = episode.get_reward_agenticAI()
             cum_discounted_reward = self.calc_cum_discounted_reward(rewards)
             cum_discounted_reward = torch.tensor(cum_discounted_reward, 
                                                 dtype=torch.float32, device=self.device)
             
+            # Perform backpropagation
             self.optimizer.zero_grad()
             total_loss = self.calc_reinforce_loss(per_example_loss, per_example_logits, 
                                                  cum_discounted_reward)
@@ -432,6 +435,7 @@ class Trainer(object):
             batch_total_loss = total_loss.item()
             train_loss = 0.98 * train_loss + 0.02 * batch_total_loss
 
+            # Log statistics
             avg_reward = np.mean(rewards)
             reward_reshape = np.reshape(rewards, (self.batch_size, self.num_rollouts))
             reward_reshape = np.sum(reward_reshape, axis=1)
@@ -453,6 +457,7 @@ class Trainer(object):
             self.summary_writer.add_scalar('avg_ep_correct', (num_ep_correct / self.batch_size), 
                                           self.batch_counter)
             
+            # Evaluate model periodically (ONLY ONCE!)
             if self.batch_counter % self.eval_every == 0:
                 with open(self.output_dir + '/scores.txt', 'a') as score_file:
                     score_file.write("Score for iteration " + str(self.batch_counter) + "\n")
@@ -462,16 +467,19 @@ class Trainer(object):
                 
                 current_mrr = self.test(beam=True, print_paths=False)
             
+            # Check early stopping
             if self.early_stopping:
                 logger.info(f"[TRAINING STOPPED] Early stopping triggered at iteration {self.batch_counter}")
                 break
             
+            # Check if reached max iterations
             if self.batch_counter >= self.total_iterations:
                 logger.info(f"[TRAINING COMPLETE] Reached maximum iterations: {self.total_iterations}")
                 break
             
             gc.collect()
         
+        # Close summary writer AFTER the loop ends
         self.summary_writer.close()
     
     

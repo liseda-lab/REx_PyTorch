@@ -189,7 +189,6 @@ class Trainer(object):
         """
 
         # Stack losses across all time steps
-        #loss = tf.stack(self.per_example_loss, axis=1)  # [B, T]
         loss = torch.stack(per_example_loss, axis=1) # [B, T]
 
         # Compute the baseline value for reward adjustment
@@ -208,13 +207,11 @@ class Trainer(object):
         # Adjust loss using the normalized reward
         #loss = torch.mul(loss, final_reward)  # [B, T]
         loss = loss * final_reward  # [B, T]
-        #loss = torch.mul(loss, final_reward)  # [B, T]
         self.loss_before_reg = loss # NOTE: check if this is necessary
 
         decaying_beta = self.beta * (0.90 ** (self.global_step_tensor / 200))
 
         # Add entropy regularization to encourage exploration
-        #total_loss = tf.reduce_mean(loss) - self.decaying_beta * self.entropy_reg_loss(self.per_example_logits) 
         #total_loss = torch.mean(loss) - decaying_beta * self.entropy_reg_loss(per_example_logits)
         total_loss = loss.mean() - decaying_beta * self.entropy_reg_loss(per_example_logits)
 
@@ -358,7 +355,8 @@ class Trainer(object):
         start_time = time.time()
         self.batch_counter = 0
         cumulative_reward = 0
-        # Set pytorch agent to training mode, as it extends nn.Module
+        
+        # Set our agent to training mode, as it extends nn.Module
         self.agent.train()
 
         for episode in self.train_environment.get_episodes():

@@ -374,6 +374,8 @@ class Trainer(object):
 
             prev_relation = torch.full((self.batch_size * self.num_rollouts,), fill_value=self.relation_vocab['DUMMY_START_RELATION'], dtype=torch.long, device=self.device)
 
+            agent_mem = None
+
             per_example_loss = []
             per_example_logits = []
             action_idx_list = []
@@ -393,7 +395,7 @@ class Trainer(object):
                 label_action = torch.zeros(self.batch_size * self.num_rollouts,
                                           dtype=torch.long, device=self.device)
                 
-                loss, logits, action_idx, chosen_relation = self.agent(
+                loss, agent_mem, logits, action_idx, chosen_relation = self.agent(
                     next_relations,
                     next_entities,
                     current_entities,
@@ -402,7 +404,8 @@ class Trainer(object):
                     query_relation,
                     range_arr,
                     first_step_of_test=False,
-                    prev_relation=prev_relation
+                    prev_relation=prev_relation,
+                    prev_state=agent_mem
                 )
 
                 per_example_loss.append(loss)

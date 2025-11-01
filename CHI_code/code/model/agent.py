@@ -226,18 +226,21 @@ class Agent(nn.Module):
 
     def forward(self, candidate_relation_sequence, candidate_entity_sequence, current_entities,
          next_weights_sequence, path_label, query_relation, range_arr,
-         first_step_of_test, prev_relation, entity_sequence = 0):
+         first_step_of_test, prev_relation, prev_state, entity_sequence = 0):
 
         self.baseline_inputs = []
 
         #query_relation = query_relation.to(self.device).long() we already have it on device in the trainer 
         query_embedding = self.relation_lookup_table(query_relation)  # [B, 2D]
 
-        state = self.zero_state(self.batch_size)
+        if prev_state is None:
+            state = self.zero_state(self.batch_size)
+        else:
+            state = prev_state
 
         #prev_relation = self.dummy_start_label  # already on device from init
 
-        loss, state, logits, action_idx, chosen_relation = self.step(
+        loss, new_state, logits, action_idx, chosen_relation = self.step(
             candidate_relation_sequence,
             candidate_entity_sequence,
             next_weights_sequence,
@@ -252,4 +255,4 @@ class Agent(nn.Module):
 
         #prev_relation = chosen_relation
 
-        return loss, logits, action_idx, chosen_relation
+        return loss, new_state, logits, action_idx, chosen_relation

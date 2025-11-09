@@ -544,7 +544,7 @@ class Episode(object):
         """
         CALCULATE REWARD BASED ON THE POSITIVE REWARD AND THE AVERAGE WEIGHT (IC).
         USE '2.0' AS A SENTINEL FOR PADDING AND IGNORE IT IN THE MEAN.
-        """sigm
+        """
         # CONVERT THE LIST OF WEIGHT VECTORS INTO A 2D ARRAY: [TIME, BATCH]
         weights_array = np.array(self.weight_history)  # SHAPE (T, B), WHERE T = # STEPS
 
@@ -563,7 +563,7 @@ class Episode(object):
 
         # CALCULATE REWARD
 
-        if self.weighted_reward==True
+        if self.weighted_reward==True:
             positive_part = self.positive_reward * average_ic
             
         else:

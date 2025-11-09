@@ -840,6 +840,8 @@ class Trainer(object):
                     #self.save_path = self.model_saver.save(sess, self.model_dir + "model" + '.ckpt')
                     # FIXME: we aren't yet saving models, or loading them later on
                     self.save_path = self.model_dir
+                    self.model_path = os.path.join(self.model_dir, "model.ckpt")
+                    torch.save(self.agent.state_dict(), self.model_path)
                     self.max_hits_at_10 = final_rewards["Hits@10"]  # Keep existing logic
                     logger.info(f"[IMPROVE] New best MRR: {current_metric:.4f} at iteration {self.batch_counter}")
                     
@@ -989,12 +991,16 @@ if __name__ == '__main__':
             with open(sidecar, "r", encoding="utf-8") as f:
                 meta = json.load(f)
             best_step = int(meta.get("best_step", 0))
+            model = meta.get("model_path")
             th = float(meta.get("threshold", threshold_for_step(best_step)))
             logger.info(f"[TEST] Using best_step={best_step} → threshold={th:.2f} (from {sidecar})")
         except Exception as e:
             logger.warning(f"[TEST] Failed to read {sidecar}: {e}; defaulting step=0, threshold={threshold_for_step(0):.2f}")
     else:
         logger.warning(f"[TEST] {sidecar} not found; defaulting step=0, threshold={threshold_for_step(0):.2f}")
+
+    # Load best model weights and parameters
+    trainer.agent.load_state_dict(torch.load(model, map_location=trainer.device))
 
     # Make the threshold logic in Episode use this step
     Episode.set_training_step(best_step)

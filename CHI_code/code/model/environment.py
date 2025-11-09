@@ -254,134 +254,6 @@ class Episode(object):
         # Join all path lines into one string separated by newlines
         return "\n".join(lines)
 
-    # def get_scores_AgenticAI_OG(self, keep_idxs):
-    #     """
-    #     Sync micro-batching: score ALL eligible paths by splitting into batches,
-    #     sleeping briefly between requests, and retrying on failures.
-    #     Returns a list of dicts (len == len(keep_idxs)) in the same order.
-    #     """
-    #     if not self.agentic_ai_enabled or _agentic_client is None:
-    #         return None
-    #     if not keep_idxs:
-    #         return None
-
-    #     # ---- knobs (tune without code changes) ----
-    #     BATCH_SIZE = int(os.getenv("AGENTIC_BATCH_SIZE", "20"))       # 20–40 recommended
-    #     SLEEP_BETWEEN = float(os.getenv("AGENTIC_SLEEP_BETWEEN", "0.4"))  # 0.3–0.5s
-    #     MAX_RETRIES = int(os.getenv("AGENTIC_MAX_RETRIES", "4"))
-    #     # ------------------------------------------
-
-    #     import time, random, json
-    #     def _score_batch(batch_idxs, start_num):
-    #         """One sync call with small retries + robust JSON extraction."""
-    #         paths_text = self._build_paths_text(keep_idxs=batch_idxs)
-
-    #         # # Debug: Check if paths_text looks correct
-    #         # path_lines = [line for line in paths_text.split('\n') if line.startswith('Path ')]
-    #         # print(f"[DEBUG] Generated text has {len(path_lines)} path lines for {len(batch_idxs)} indices")
-            
-
-    #         prompt = f"""
-    #         You are evaluating drug–disease explanation paths from the perspective of the following persona:
-
-    #         {self.persona_text}
-
-    #         Score EACH path individually on three criteria:
-    #         1. Scientific Validity (V): 1–5. Scientific correctness, plausibility, and coherence based on biomedical knowledge.
-    #         2. Completeness (C): 1–5 where 3 is ideal. 1 = too simple, 5 = too complex. Reward paths that are sufficiently detailed without overload.
-    #         3. Relevance (R): 1–5. Usefulness for understanding why the prediction matters and how it connects to the task.
-
-    #         Paths to evaluate ({len(batch_idxs)} paths total):
-    #             {paths_text}
-
-    #         Return a JSON array with {len(batch_idxs)} objects (one per path above):
-    #         [{{"validity": 4, "completeness": 3, "relevance": 5}}, ...]
-
-    #         IMPORTANT: Your array must have EXACTLY {len(batch_idxs)} scores. DOUBLE CHECK BEFORE RETURNING RESULTS. 
-    #         """.strip()
-
-    #         last_err = None
-    #         for attempt in range(1, MAX_RETRIES + 1):
-    #             try:
-    #                 resp = _agentic_client.chat.completions.create(
-    #                     model="gpt-4o-mini",
-    #                     messages=[{"role": "user", "content": prompt}],
-    #                     temperature=0,
-    #                 )
-    #                 raw = resp.choices[0].message.content.strip()
-
-    #                 # tolerate fenced code blocks
-    #                 if "```" in raw:
-    #                     parts = raw.split("```")
-    #                     raw = "".join(p for p in parts if "[" in p and "]" in p)
-    #                 # extract JSON slice
-    #                 a, b = raw.find("["), raw.rfind("]")
-    #                 if a != -1 and b != -1 and b > a:
-    #                     raw = raw[a:b+1]
-
-    #                 data = json.loads(raw)
-    #                 if not isinstance(data, list):
-    #                     raise ValueError("response is not a list")
-
-    #                 # normalize and clamp
-    #                 out = []
-    #                 for item in data:
-    #                     def _num(k, d=3.0):
-    #                         try: return float(item.get(k, d))
-    #                         except: return d
-    #                     out.append({
-    #                         "validity": max(1.0, min(5.0, _num("validity"))),
-    #                         "completeness": max(1.0, min(5.0, _num("completeness"))),
-    #                         "relevance": max(1.0, min(5.0, _num("relevance"))),
-    #                     })
-
-    #                 # Handle length mismatch gracefully
-    #                 if len(out) != len(batch_idxs):
-    #                     print(f"[WARN] Expected {len(batch_idxs)} scores, got {len(out)}")
-
-    #                     # # Log the raw response for debugging
-    #                     # if len(raw) < 2000:  # Only if not too long
-    #                     #     print(f"[DEBUG] Raw response: {raw[:500]}...")
-                        
-    #                     # # Check if the LLM numbered the scores
-    #                     # if out and isinstance(out[0], dict) and any('path' in str(k).lower() for k in out[0].keys()):
-    #                     #     print("[DEBUG] LLM may have added path numbers/labels")
-                        
-    #                     # Pad with defaults if too few
-    #                     while len(out) < len(batch_idxs):
-    #                         print(f"  Adding default score for missing path {len(out)+1}")
-    #                         out.append({"validity": 3.0, "completeness": 2.0, "relevance": 3.0})
-                        
-    #                     # Trim if too many
-    #                     if len(out) > len(batch_idxs):
-    #                         print(f"  Trimming extra scores")
-    #                         out = out[:len(batch_idxs)]
-                    
-    #                 return out  # Return the padded/trimmed scores
-                    
-    #             except Exception as e:
-    #                 last_err = e
-    #                 if attempt < MAX_RETRIES:
-    #                     delay = SLEEP_BETWEEN * (1.25 ** (attempt - 1)) + random.uniform(0, 0.2)
-    #                     time.sleep(delay)
-            
-    #         # Only reached if all retries failed
-    #         print(f"[FAIL] Batch completely failed after {MAX_RETRIES} attempts: {last_err}")
-    #         return [{"validity": 2.5, "completeness": 3.0, "relevance": 2.5}
-    #                 for _ in batch_idxs]
-        
-    #     # ---- NOW the main loop to process all batches ----
-    #     results = []
-    #     start_num = 1
-    #     for i in range(0, len(keep_idxs), BATCH_SIZE):
-    #         batch_idxs = keep_idxs[i:i + BATCH_SIZE]
-    #         batch_scores = _score_batch(batch_idxs, start_num=start_num)
-    #         results.extend(batch_scores)
-    #         start_num += len(batch_idxs)
-    #         if i + BATCH_SIZE < len(keep_idxs):  # Don't sleep after last batch
-    #             time.sleep(SLEEP_BETWEEN)
-
-    #     return results
     
     def get_scores_AgenticAI(self, keep_idxs):
         """
@@ -525,7 +397,7 @@ class Episode(object):
     def get_reward_agenticAI(self, wV=1/3, wC=1/3, wR=1/3):
         training_step = getattr(Episode, '_training_step', 0)
         
-        base = self.get_reward_weights_sigmoid()
+        base = self.get_reward_weights_rex()
         self._cache_ic_summaries()
         B = base.shape[0]
 
@@ -536,26 +408,6 @@ class Episode(object):
             self.llm_dimensions = {}
             self.reward_kind = np.array(['ic_only'] * B, dtype=object)
             return base
-        # <
-
-        # if training_step < 50:
-        #     # Just return the IC-based rewards directly
-        #     return base  # Simple and effective
-        # PHASE 2: Persona-based refinement
-        # Now we have a model that knows how to find paths
-        # Time to shape those paths according to persona preferences
-
-        # # Progressive threshold
-        # if training_step < 60:
-        #     threshold = 0.5
-        # elif training_step < 80:
-        #     threshold = 0.55
-        # elif training_step < 120:
-        #     threshold = 0.6
-        # elif training_step < 150:
-        #     threshold = 0.65
-        # else:
-        #     threshold = 0.7
         
         threshold = threshold_for_step(training_step)
         
@@ -688,41 +540,30 @@ class Episode(object):
         return out
 
 
-
-
-
-    def get_reward_weights_sigmoid(self):
+    def get_reward_weights_rex(self):
         """
         CALCULATE REWARD BASED ON THE POSITIVE REWARD AND THE AVERAGE WEIGHT (IC).
         USE '2.0' AS A SENTINEL FOR PADDING AND IGNORE IT IN THE MEAN.
-        """
-        # 1) CONVERT THE LIST OF WEIGHT VECTORS INTO A 2D ARRAY: [TIME, BATCH]
+        """sigm
+        # CONVERT THE LIST OF WEIGHT VECTORS INTO A 2D ARRAY: [TIME, BATCH]
         weights_array = np.array(self.weight_history)  # SHAPE (T, B), WHERE T = # STEPS
 
-        # 2) MAKE A MASK FOR THE PADDING (WHERE WE HAVE 2.0) 
+        # MAKE A MASK FOR THE PADDING (WHERE WE HAVE 2.0) 
         #    'True' => IT IS PADDING, 'False' => REAL WEIGHT
         mask_2 = (weights_array == 2.0)
 
-        # 3) REPLACE 2.0 BY np.nan SO WE CAN IGNORE IT IN THE AVERAGE
+        # REPLACE 2.0 BY np.nan SO WE CAN IGNORE IT IN THE AVERAGE
         weights_array[mask_2] = np.nan
 
-        # 4) CALCULATE THE MEAN ALONG AXIS=0 (ROLLOUT DIM), IGNORING NaN
+        # CALCULATE THE MEAN ALONG AXIS=0 (ROLLOUT DIM), IGNORING NaN
         average_ic = np.nanmean(weights_array, axis=0)  # SHAPE [B,]
-
-        # 5) CALCULATE SIZE OF THE PATHS
-        size = np.sum(~mask_2, axis=0)  # shape (B,)
-
-       # 6) GIVE A PENALTY TO THE SIZE OF THE PATH:
-        #    IF SIZE >= 3 => 0.5 (PENALIZE)
-        #    ELSE         => 1 (KEEP REWARD)
-        punish_size = np.where(size >= 3, 0.5, 1)
     
-        # 7) BUILD THE REWARD BASED ON SUCCESS
+        # BUILD THE REWARD BASED ON SUCCESS
         success_mask = (self.current_entities == self.end_entities)
 
-        # 8) CALCULATE REWARD
+        # CALCULATE REWARD
 
-        if self.weighted_reward==True and self.sigmoid==False:
+        if self.weighted_reward==True
             positive_part = self.positive_reward * average_ic
             
         else:
@@ -735,38 +576,6 @@ class Episode(object):
         return final_reward
 
 
-    def get_reward_weights(self):
-        """
-        Calculate reward based on the positive reward and the weights of the edges.
-         - If the current entities match the end entities, reward is calculated as:
-        average of edge weights multiplied by the positive reward.
-        - Otherwise, the negative reward is applied.
-        """
-        reward = (self.current_entities == self.end_entities)
-
-        #calculate the average of the edge weights
-        average_ic = np.mean(self.weight_history, axis=0) 
-
-        if self.weighted_reward:
-            #simple multiplication of the positive reward with the average of the edge weights
-            positive_reward = self.positive_reward * average_ic
-
-        else:
-            positive_reward = self.positive_reward
-
-        
-        # set the True and False values to the values of positive and negative rewards.
-        condlist = [reward == True, reward == False]
-        choicelist = [positive_reward, self.negative_reward]
-        reward = np.select(condlist, choicelist)  
-
-        # print if positive reward is given 
-        if np.any(reward == self.positive_reward):
-            print("Positive reward was given")
-
-        return reward
-
-
     def __call__(self, action):
         if self.size_flexibility:
             self.current_hop += 1
@@ -776,7 +585,6 @@ class Episode(object):
             chosen_ents = self.state['next_entities'][np.arange(bsz), action]
             self.current_entities = chosen_ents
 
-            # --- NEW
             #track chosen relations for each step
             chosen_rels = self.state['next_relations'][np.arange(bsz), action]
             

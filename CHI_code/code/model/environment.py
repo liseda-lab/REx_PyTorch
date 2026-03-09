@@ -4,6 +4,7 @@ import numpy as np
 from collections import defaultdict
 from code.data.feed_data import RelationEntityBatcher
 from code.data.grapher import RelationEntityGrapher
+import torch
 
 
 import logging
@@ -23,14 +24,102 @@ import json
 from dotenv import load_dotenv
 load_dotenv()  # ADD THIS
 # Optional OpenAI client (kept safe if lib/key are missing)
-try:
+"""try:
     from openai import OpenAI  
-    _agentic_client = OpenAI()  # uses OPENAI_API_KEY env var
+    _agentic_client = OpenAI(
+        base_url="http://localhost:8000/v1",
+        api_key="EMPTY" 
+    ) 
 except Exception as _e:
     _agentic_client = None
     logger = logging.getLogger(__name__)
-    logger.warning("OpenAI client not available: %s", _e)
+    logger.warning("OpenAI client not available: %s", _e)"""
 #--------
+try:
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    
+    _llm_model = None
+    _llm_tokenizer = None
+    _llm_device = None
+    
+    def _init_llm():
+        global _llm_model, _llm_tokenizer, _llm_device
+        if _llm_model is not None:
+            return
+        
+        MODEL_NAME = "Qwen/Qwen3.5-9B"
+        print(f"[LLM] Loading {MODEL_NAME}...")
+        
+        _llm_device = "cuda" if torch.cuda.is_available() else "cpu"
+        
+        _llm_tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+        _llm_model = AutoModelForCausalLM.from_pretrained(
+            MODEL_NAME,
+            dtype=torch.bfloat16,
+            device_map="auto"
+            )
+        
+        print(f"[LLM] Ready on {_llm_device}")
+    
+    def _call_llm(messages, temperature=0):
+        global _llm_model, _llm_tokenizer, _llm_device
+        
+        if _llm_model is None:
+            _init_llm()
+        
+        try:
+            prompt = _llm_tokenizer.apply_chat_template(
+                messages, 
+                tokenize=False, 
+                add_generation_prompt=True,
+                enable_thinking=False
+            )
+            inputs = _llm_tokenizer(prompt, return_tensors="pt").to(_llm_device)
+            
+            with torch.no_grad():
+                outputs = _llm_model.generate(
+                    **inputs,
+                    max_new_tokens=3072,
+                    temperature=temperature,
+                    do_sample=True, # Check if these parameters are necessary
+                    top_p=0.9,
+                    pad_token_id=_llm_tokenizer.pad_token_id,
+                )
+            
+            #response = _llm_tokenizer.decode(outputs[0], skip_special_tokens=True)
+            #raw = response[len(prompt):].strip()
+
+            #if "<think>" in raw:
+            #    print("[LLM] Detected <think> in response; using content after it as final output.")
+            #    raw = raw.split("<think>")[-1].strip()
+
+            #return raw
+            #return response
+
+            new_tokens = outputs[0][len(inputs.input_ids[0]):]
+            response = _llm_tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+            # Keeping raw response for later debugging if no JSON is found
+            responseSplit = response
+            
+            if "<think>" in response and "</think>" in response:
+                responseSplit = response.split("</think>", 1)[1].strip()
+            
+            json_start = responseSplit.find("[")
+            json_end = responseSplit.rfind("]")
+            
+            if json_start != -1 and json_end > json_start:
+                return responseSplit[json_start:json_end+1], response
+            
+            return response, response
+            
+        except Exception as e:
+            print(f"[LLM ERROR] {e}")
+            return ""
+    
+except Exception as _e:
+    _call_llm = None
+    logger.warning("LLM not available: %s", _e)
+
 
 # --- dedicated env logger (separate file, no console) ---
 _env_logger = logging.getLogger("agentic.env")
@@ -198,13 +287,18 @@ class Episode(object):
                 if self.relation_history
                 else np.zeros((0, self.visited_entities.shape[0]), dtype=np.float32))
 
-        # Helper to map entity ID to name if vocab exists, else str(ID)
+        #NEW CODE - Helper to map entity numeric ID -> human-readable label
+        # Flow: numeric ID -> rev_vocab -> vocab string (e.g. "Gene::134391") -> label (e.g. "SERPINC1")
         def name_e(eid):
-            return rev_e.get(int(eid), str(int(eid))) if rev_e else str(int(eid))
+            vocab_str = rev_e.get(int(eid), str(int(eid))) if rev_e else str(int(eid))
+            return self.grapher.get_entity_label(vocab_str)
 
-        # Helper to map relation ID to name if vocab exists, else str(ID)
+        # Helper to map relation numeric ID -> human-readable label
+        # Flow: numeric ID -> rev_vocab -> vocab string (e.g. "CtD") -> label (e.g. "treats")
         def name_r(rid):
-            return rev_r.get(int(rid), str(int(rid))) if rev_r else str(int(rid))
+            vocab_str = rev_r.get(int(rid), str(int(rid))) if rev_r else str(int(rid))
+            return self.grapher.get_relation_label(vocab_str)
+        #END NEW CODE
 
         B = self.visited_entities.shape[0]  # Number of rollouts in the batch
 
@@ -254,6 +348,134 @@ class Episode(object):
         # Join all path lines into one string separated by newlines
         return "\n".join(lines)
 
+    # def get_scores_AgenticAI_OG(self, keep_idxs):
+    #     """
+    #     Sync micro-batching: score ALL eligible paths by splitting into batches,
+    #     sleeping briefly between requests, and retrying on failures.
+    #     Returns a list of dicts (len == len(keep_idxs)) in the same order.
+    #     """
+    #     if not self.agentic_ai_enabled or _agentic_client is None:
+    #         return None
+    #     if not keep_idxs:
+    #         return None
+
+    #     # ---- knobs (tune without code changes) ----
+    #     BATCH_SIZE = int(os.getenv("AGENTIC_BATCH_SIZE", "20"))       # 20–40 recommended
+    #     SLEEP_BETWEEN = float(os.getenv("AGENTIC_SLEEP_BETWEEN", "0.4"))  # 0.3–0.5s
+    #     MAX_RETRIES = int(os.getenv("AGENTIC_MAX_RETRIES", "4"))
+    #     # ------------------------------------------
+
+    #     import time, random, json
+    #     def _score_batch(batch_idxs, start_num):
+    #         """One sync call with small retries + robust JSON extraction."""
+    #         paths_text = self._build_paths_text(keep_idxs=batch_idxs)
+
+    #         # # Debug: Check if paths_text looks correct
+    #         # path_lines = [line for line in paths_text.split('\n') if line.startswith('Path ')]
+    #         # print(f"[DEBUG] Generated text has {len(path_lines)} path lines for {len(batch_idxs)} indices")
+            
+
+    #         prompt = f"""
+    #         You are evaluating drug–disease explanation paths from the perspective of the following persona:
+
+    #         {self.persona_text}
+
+    #         Score EACH path individually on three criteria:
+    #         1. Scientific Validity (V): 1–5. Scientific correctness, plausibility, and coherence based on biomedical knowledge.
+    #         2. Completeness (C): 1–5 where 3 is ideal. 1 = too simple, 5 = too complex. Reward paths that are sufficiently detailed without overload.
+    #         3. Relevance (R): 1–5. Usefulness for understanding why the prediction matters and how it connects to the task.
+
+    #         Paths to evaluate ({len(batch_idxs)} paths total):
+    #             {paths_text}
+
+    #         Return a JSON array with {len(batch_idxs)} objects (one per path above):
+    #         [{{"validity": 4, "completeness": 3, "relevance": 5}}, ...]
+
+    #         IMPORTANT: Your array must have EXACTLY {len(batch_idxs)} scores. DOUBLE CHECK BEFORE RETURNING RESULTS. 
+    #         """.strip()
+
+    #         last_err = None
+    #         for attempt in range(1, MAX_RETRIES + 1):
+    #             try:
+    #                 resp = _agentic_client.chat.completions.create(
+    #                     model="gpt-4o-mini",
+    #                     messages=[{"role": "user", "content": prompt}],
+    #                     temperature=0,
+    #                 )
+    #                 raw = resp.choices[0].message.content.strip()
+
+    #                 # tolerate fenced code blocks
+    #                 if "```" in raw:
+    #                     parts = raw.split("```")
+    #                     raw = "".join(p for p in parts if "[" in p and "]" in p)
+    #                 # extract JSON slice
+    #                 a, b = raw.find("["), raw.rfind("]")
+    #                 if a != -1 and b != -1 and b > a:
+    #                     raw = raw[a:b+1]
+
+    #                 data = json.loads(raw)
+    #                 if not isinstance(data, list):
+    #                     raise ValueError("response is not a list")
+
+    #                 # normalize and clamp
+    #                 out = []
+    #                 for item in data:
+    #                     def _num(k, d=3.0):
+    #                         try: return float(item.get(k, d))
+    #                         except: return d
+    #                     out.append({
+    #                         "validity": max(1.0, min(5.0, _num("validity"))),
+    #                         "completeness": max(1.0, min(5.0, _num("completeness"))),
+    #                         "relevance": max(1.0, min(5.0, _num("relevance"))),
+    #                     })
+
+    #                 # Handle length mismatch gracefully
+    #                 if len(out) != len(batch_idxs):
+    #                     print(f"[WARN] Expected {len(batch_idxs)} scores, got {len(out)}")
+
+    #                     # # Log the raw response for debugging
+    #                     # if len(raw) < 2000:  # Only if not too long
+    #                     #     print(f"[DEBUG] Raw response: {raw[:500]}...")
+                        
+    #                     # # Check if the LLM numbered the scores
+    #                     # if out and isinstance(out[0], dict) and any('path' in str(k).lower() for k in out[0].keys()):
+    #                     #     print("[DEBUG] LLM may have added path numbers/labels")
+                        
+    #                     # Pad with defaults if too few
+    #                     while len(out) < len(batch_idxs):
+    #                         print(f"  Adding default score for missing path {len(out)+1}")
+    #                         out.append({"validity": 3.0, "completeness": 2.0, "relevance": 3.0})
+                        
+    #                     # Trim if too many
+    #                     if len(out) > len(batch_idxs):
+    #                         print(f"  Trimming extra scores")
+    #                         out = out[:len(batch_idxs)]
+                    
+    #                 return out  # Return the padded/trimmed scores
+                    
+    #             except Exception as e:
+    #                 last_err = e
+    #                 if attempt < MAX_RETRIES:
+    #                     delay = SLEEP_BETWEEN * (1.25 ** (attempt - 1)) + random.uniform(0, 0.2)
+    #                     time.sleep(delay)
+            
+    #         # Only reached if all retries failed
+    #         print(f"[FAIL] Batch completely failed after {MAX_RETRIES} attempts: {last_err}")
+    #         return [{"validity": 2.5, "completeness": 3.0, "relevance": 2.5}
+    #                 for _ in batch_idxs]
+        
+    #     # ---- NOW the main loop to process all batches ----
+    #     results = []
+    #     start_num = 1
+    #     for i in range(0, len(keep_idxs), BATCH_SIZE):
+    #         batch_idxs = keep_idxs[i:i + BATCH_SIZE]
+    #         batch_scores = _score_batch(batch_idxs, start_num=start_num)
+    #         results.extend(batch_scores)
+    #         start_num += len(batch_idxs)
+    #         if i + BATCH_SIZE < len(keep_idxs):  # Don't sleep after last batch
+    #             time.sleep(SLEEP_BETWEEN)
+
+    #     return results
     
     def get_scores_AgenticAI(self, keep_idxs):
         """
@@ -261,7 +483,9 @@ class Episode(object):
         sleeping briefly between requests, and retrying on failures.
         Returns a list of dicts (len == len(keep_idxs)) in the same order.
         """
-        if not self.agentic_ai_enabled or _agentic_client is None or not keep_idxs:
+        #if not self.agentic_ai_enabled or _agentic_client is None or not keep_idxs:
+        if not self.agentic_ai_enabled or _call_llm is None or not keep_idxs:
+            print("[INFO] Agentic AI disabled or client/persona missing; skipping LLM scoring.")
             return None
 
         # ---- knobs (tune without code changes) ----
@@ -300,30 +524,43 @@ class Episode(object):
 
             Return ONLY valid JSON with an array of exactly {len(batch_idxs)} objects.
             Each object MUST be: {{"id": <int from {id_list}>, "validity": <int>, "completeness": <int>, "relevance": <int>}}.
-            Use ONLY the ids from this set: {id_list}. Do not invent or omit ids. DOUBLE CHECK BEFORE RETURNING RESULTS. 
+            Use ONLY the ids from this set: {id_list}. Do not invent or omit ids. DOUBLE CHECK BEFORE RETURNING RESULTS.
+            Do NOT return any text outside the JSON array. Do not return thinking traces or internal monologue. The output MUST be a JSON array of objects with id, validity, completeness, and relevance scores as described above. 
             """.strip()
 
 
             last_err = None
             for attempt in range(1, MAX_RETRIES + 1):
                 try:
-                    resp = _agentic_client.chat.completions.create(
-                        model="gpt-4o-mini",
+                    print(f"Attempted LLM call at time {time.strftime('%Y-%m-%d %H:%M:%S')}")
+                    """resp = _agentic_client.chat.completions.create(
+                        model="Qwen/Qwen3.5-9B",
                         messages=[{"role": "user", "content": prompt}],
-                        temperature=0,
+                        max_tokens=81920,
+                        temperature=1.0,
+                        top_p=0.95,
+                        presence_penalty=1.5, 
+                        extra_body={
+                            "top_k": 20,
+                            "chat_template_kwargs": {"enable_thinking": False},
+                        },
                     )
-                    raw = resp.choices[0].message.content.strip()
+                    raw = resp.choices[0].message.content.strip()"""
+                    #messages = [{"role": "system", "content": "You are a JSON generator. Respond ONLY with valid JSON. Do not explain or output anything except JSON. Think before producing a final response."}, {"role": "user", "content": prompt}]
+                    messages = [{"role": "user", "content": prompt}]
+                    resp, raw = _call_llm(messages, temperature=1.0)
+                    print(f"[DEBUG] Parsed response: {resp}")
 
                     # tolerate fenced code blocks
-                    if "```" in raw:
-                        parts = raw.split("```")
-                        raw = "".join(p for p in parts if "[" in p and "]" in p)
+                    if "```" in resp:
+                        parts = resp.split("```")
+                        resp = "".join(p for p in parts if "[" in p and "]" in p)
                     # extract JSON slice
-                    a, b = raw.find("["), raw.rfind("]")
+                    a, b = resp.find("["), resp.rfind("]")
                     if a != -1 and b != -1 and b > a:
-                        raw = raw[a:b+1]
+                        resp = resp[a:b+1]
 
-                    data = json.loads(raw)  # after strip code fences
+                    data = json.loads(resp)  # after strip code fences
 
                     # Allow either a plain array or {"scores":[...]} wrapper
                     if isinstance(data, dict) and "scores" in data:
@@ -365,6 +602,8 @@ class Episode(object):
                     if missing or len(by_id) != len(id_list):
                         print(f"[WARN] ID-mismatch: expected {len(id_list)}, got {len(by_id)}, "
                             f"filled defaults for {missing} ids")
+                        print(f"[DEBUG] Prompt was:\n{prompt}\n")
+                        print(f"[DEBUG] Raw response was:\n{raw}\n")
                     return out
                     
                 except Exception as e:
@@ -397,17 +636,40 @@ class Episode(object):
     def get_reward_agenticAI(self, wV=1/3, wC=1/3, wR=1/3):
         training_step = getattr(Episode, '_training_step', 0)
         
-        base = self.get_reward_weights_rex()
+        base = self.get_reward_weights_sigmoid()
         self._cache_ic_summaries()
         B = base.shape[0]
 
         # >>> NEW: if agentic mode is disabled (or no client/persona), just use base
-        if (not self.agentic_ai_enabled) or (_agentic_client is None) or (not self.persona_text):
+        #if (not self.agentic_ai_enabled) or (_agentic_client is None) or (not self.persona_text):
+        if (not self.agentic_ai_enabled) or (_call_llm is None) or (not self.persona_text):
             # keep logging arrays coherent so the rest of the pipeline/test logger works
+            print("[INFO] Agentic AI disabled or client/persona missing; using IC-based rewards only.")
+            #print(self.agentic_ai_enabled, _call_llm is None, not self.persona_text)
             self.agentic_scores = base.astype(np.float32)
             self.llm_dimensions = {}
             self.reward_kind = np.array(['ic_only'] * B, dtype=object)
             return base
+        # <
+
+        # if training_step < 50:
+        #     # Just return the IC-based rewards directly
+        #     return base  # Simple and effective
+        # PHASE 2: Persona-based refinement
+        # Now we have a model that knows how to find paths
+        # Time to shape those paths according to persona preferences
+
+        # # Progressive threshold
+        # if training_step < 60:
+        #     threshold = 0.5
+        # elif training_step < 80:
+        #     threshold = 0.55
+        # elif training_step < 120:
+        #     threshold = 0.6
+        # elif training_step < 150:
+        #     threshold = 0.65
+        # else:
+        #     threshold = 0.7
         
         threshold = threshold_for_step(training_step)
         
@@ -540,30 +802,41 @@ class Episode(object):
         return out
 
 
-    def get_reward_weights_rex(self):
+
+
+
+    def get_reward_weights_sigmoid(self):
         """
         CALCULATE REWARD BASED ON THE POSITIVE REWARD AND THE AVERAGE WEIGHT (IC).
         USE '2.0' AS A SENTINEL FOR PADDING AND IGNORE IT IN THE MEAN.
         """
-        # CONVERT THE LIST OF WEIGHT VECTORS INTO A 2D ARRAY: [TIME, BATCH]
+        # 1) CONVERT THE LIST OF WEIGHT VECTORS INTO A 2D ARRAY: [TIME, BATCH]
         weights_array = np.array(self.weight_history)  # SHAPE (T, B), WHERE T = # STEPS
 
-        # MAKE A MASK FOR THE PADDING (WHERE WE HAVE 2.0) 
+        # 2) MAKE A MASK FOR THE PADDING (WHERE WE HAVE 2.0) 
         #    'True' => IT IS PADDING, 'False' => REAL WEIGHT
         mask_2 = (weights_array == 2.0)
 
-        # REPLACE 2.0 BY np.nan SO WE CAN IGNORE IT IN THE AVERAGE
+        # 3) REPLACE 2.0 BY np.nan SO WE CAN IGNORE IT IN THE AVERAGE
         weights_array[mask_2] = np.nan
 
-        # CALCULATE THE MEAN ALONG AXIS=0 (ROLLOUT DIM), IGNORING NaN
+        # 4) CALCULATE THE MEAN ALONG AXIS=0 (ROLLOUT DIM), IGNORING NaN
         average_ic = np.nanmean(weights_array, axis=0)  # SHAPE [B,]
+
+        # 5) CALCULATE SIZE OF THE PATHS
+        size = np.sum(~mask_2, axis=0)  # shape (B,)
+
+       # 6) GIVE A PENALTY TO THE SIZE OF THE PATH:
+        #    IF SIZE >= 3 => 0.5 (PENALIZE)
+        #    ELSE         => 1 (KEEP REWARD)
+        punish_size = np.where(size >= 3, 0.5, 1)
     
-        # BUILD THE REWARD BASED ON SUCCESS
+        # 7) BUILD THE REWARD BASED ON SUCCESS
         success_mask = (self.current_entities == self.end_entities)
 
-        # CALCULATE REWARD
+        # 8) CALCULATE REWARD
 
-        if self.weighted_reward==True:
+        if self.weighted_reward==True and self.sigmoid==False:
             positive_part = self.positive_reward * average_ic
             
         else:
@@ -576,6 +849,38 @@ class Episode(object):
         return final_reward
 
 
+    def get_reward_weights(self):
+        """
+        Calculate reward based on the positive reward and the weights of the edges.
+         - If the current entities match the end entities, reward is calculated as:
+        average of edge weights multiplied by the positive reward.
+        - Otherwise, the negative reward is applied.
+        """
+        reward = (self.current_entities == self.end_entities)
+
+        #calculate the average of the edge weights
+        average_ic = np.mean(self.weight_history, axis=0) 
+
+        if self.weighted_reward:
+            #simple multiplication of the positive reward with the average of the edge weights
+            positive_reward = self.positive_reward * average_ic
+
+        else:
+            positive_reward = self.positive_reward
+
+        
+        # set the True and False values to the values of positive and negative rewards.
+        condlist = [reward == True, reward == False]
+        choicelist = [positive_reward, self.negative_reward]
+        reward = np.select(condlist, choicelist)  
+
+        # print if positive reward is given 
+        if np.any(reward == self.positive_reward):
+            print("Positive reward was given")
+
+        return reward
+
+
     def __call__(self, action):
         if self.size_flexibility:
             self.current_hop += 1
@@ -585,6 +890,7 @@ class Episode(object):
             chosen_ents = self.state['next_entities'][np.arange(bsz), action]
             self.current_entities = chosen_ents
 
+            # --- NEW
             #track chosen relations for each step
             chosen_rels = self.state['next_relations'][np.arange(bsz), action]
             
@@ -711,7 +1017,8 @@ class env(object):
                                              max_num_actions=params['max_num_actions'],
                                              entity_vocab=params['entity_vocab'],
                                              relation_vocab=params['relation_vocab'],
-                                             edges_weight=params['edges_weight']
+                                             edges_weight=params['edges_weight'],
+                                             labels_dir=params['data_input_dir']
                                              )
 
     def get_episodes(self):

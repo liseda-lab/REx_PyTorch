@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 
 
 class RelationEntityGrapher:
-    def __init__(self, triple_store, relation_vocab, entity_vocab, edges_weight, max_num_actions):
+    def __init__(self, triple_store, relation_vocab, entity_vocab, edges_weight, max_num_actions, labels_dir=None):
 
         self.ePAD = entity_vocab['PAD']
         self.rPAD = relation_vocab['PAD']
@@ -20,13 +20,58 @@ class RelationEntityGrapher:
         self.array_store[:, :, 1] *= self.rPAD
         self.masked_array_store = None
 
-        # EDGES WEITGHTS WITH STANDARD VALUES
+        # EDGES WEIGHTS WITH STANDARD VALUES
         self.weights_store = np.zeros((len(entity_vocab), max_num_actions), dtype=np.float32)
 
         self.rev_relation_vocab = dict([(v, k) for k, v in relation_vocab.items()])
         self.rev_entity_vocab = dict([(v, k) for k, v in entity_vocab.items()])
+
+        #NEW CODE - Load human-readable labels for LLM prompts (entity ID -> name, relation code -> name)
+        self.entity_labels = {}   # e.g. "Compound::DB00808" -> "Loperamide"
+        self.relation_labels = {} # e.g. "CtD" -> "treats"
+        if labels_dir:
+            self._load_labels(labels_dir)
+        #END NEW CODE
+
         self.create_graph()
         print("KG constructed")
+
+    #NEW CODE - Load and lookup human-readable labels
+    def _load_labels(self, labels_dir):
+        """Load human-readable labels from TSV files in the dataset folder."""
+        import os
+        # Load entity labels: graph_labels.tsv (entity_id \t label \t type)
+        entity_labels_path = os.path.join(labels_dir, "graph_labels.tsv")
+        if os.path.isfile(entity_labels_path):
+            with open(entity_labels_path, "r", encoding="utf-8") as f:
+                reader = csv.reader(f, delimiter='\t')
+                for row in reader:
+                    if len(row) >= 2:
+                        self.entity_labels[row[0]] = row[1]
+            logger.info(f"Loaded {len(self.entity_labels)} entity labels from {entity_labels_path}")
+        else:
+            logger.warning(f"Entity labels file not found: {entity_labels_path}")
+
+        # Load relation labels: edges_labels.tsv (relation_code \t label)
+        relation_labels_path = os.path.join(labels_dir, "edges_labels.tsv")
+        if os.path.isfile(relation_labels_path):
+            with open(relation_labels_path, "r", encoding="utf-8") as f:
+                reader = csv.reader(f, delimiter='\t')
+                for row in reader:
+                    if len(row) >= 2:
+                        self.relation_labels[row[0]] = row[1]
+            logger.info(f"Loaded {len(self.relation_labels)} relation labels from {relation_labels_path}")
+        else:
+            logger.warning(f"Relation labels file not found: {relation_labels_path}")
+
+    def get_entity_label(self, entity_id_str):
+        """Map an entity vocab string (e.g. 'Compound::DB00808') to its human label (e.g. 'Loperamide')."""
+        return self.entity_labels.get(entity_id_str, entity_id_str)
+
+    def get_relation_label(self, relation_code):
+        """Map a relation vocab string (e.g. 'CtD') to its human label (e.g. 'treats')."""
+        return self.relation_labels.get(relation_code, relation_code)
+    #END NEW CODE
 
     def create_graph(self):
         #open the file and read the triples

@@ -243,23 +243,98 @@ class Episode(object):
 
     def _cache_ic_summaries(self):
         """
-        Cache path-level IC mean per rollout (ignore sentinel=2.0 via NaN).
+        Cache path-level IC mean per rollout.
         Sets:
         - self.ic_mean: np.ndarray shape [B]
         """
-        if not self.weight_history:
-            B = self.start_entities.shape[0]
-            self.ic_mean = np.zeros((B,), dtype=np.float32)
+        ## FIX IC DECISION - use recomputed IC from visited_entities + graph
+        self._recompute_from_path()
+        self.ic_mean = self.recomputed_ic_mean
+        ## END FIX IC DECISION
+
+    ## FIX IC DECISION
+    def _recompute_from_path(self):
+        """
+        Recompute IC weights and relations directly from visited_entities
+        using the graph structure (array_store / weights_store), bypassing
+        potentially misaligned weight_history and relation_history from
+        beam search reordering.
+
+        Called once per episode; results are cached.
+
+        Sets:
+        - self.recomputed_ic_per_step: list of np.ndarray [B], sentinel=2.0 for padding
+        - self.recomputed_rels_per_step: list of np.ndarray [B], sentinel=2.0 for padding
+        - self.recomputed_ic_mean: np.ndarray [B]
+        """
+        if getattr(self, '_path_recomputed', False):
             return
 
-        weights = np.array(self.weight_history, dtype=np.float32)  # [T, B]
-        mask = (weights == 2.0)
-        w = weights.copy()
-        w[mask] = np.nan
+        B = self.visited_entities.shape[0]
+        T = self.visited_entities.shape[1] - 1  # number of edges
 
-        ic_mean = np.nanmean(w, axis=0)  # [B]
-        self.ic_mean = np.nan_to_num(ic_mean, nan=0.0)
+        if T == 0:
+            self.recomputed_ic_per_step = []
+            self.recomputed_rels_per_step = []
+            self.recomputed_ic_mean = np.zeros(B, dtype=np.float32)
+            self._path_recomputed = True
+            return
 
+        # Pre-allocate: sentinel 2.0 means padding (same convention as weight_history)
+        all_weights = np.full((T, B), 2.0, dtype=np.float32)
+        all_rels = np.full((T, B), 2.0, dtype=np.float32)
+
+        for b in range(B):
+            for t in range(T):
+                e1 = int(self.visited_entities[b, t])
+                e2 = int(self.visited_entities[b, t + 1])
+
+                # Look up edge e1->e2 in the graph
+                neighbors = self.grapher.array_store[e1]    # [max_actions, 2]
+                edge_wts = self.grapher.weights_store[e1]    # [max_actions]
+
+                match_idxs = np.where(neighbors[:, 0] == e2)[0]
+
+                if len(match_idxs) > 0:
+                    # Prefer non-self-loop (index > 0); disambiguate with
+                    # relation_history hint when multiple edges exist
+                    idx = match_idxs[0]
+                    if len(match_idxs) > 1:
+                        # Try relation_history as hint (best-effort)
+                        if t < len(self.relation_history):
+                            rel_hint = self.relation_history[t][b]
+                            if rel_hint != 2.0:
+                                for mi in match_idxs:
+                                    if neighbors[mi, 1] == int(rel_hint):
+                                        idx = mi
+                                        break
+                        # Otherwise prefer first non-self-loop edge
+                        elif idx == 0 and len(match_idxs) > 1:
+                            idx = match_idxs[1]
+
+                    all_weights[t, b] = edge_wts[idx]
+                    all_rels[t, b] = float(neighbors[idx, 1])
+                else:
+                    # Edge not in graph — fallback
+                    all_weights[t, b] = 0.5
+                    all_rels[t, b] = -1.0
+
+                # If we reached the target entity, remaining steps are padding
+                if self.size_flexibility and e2 == self.end_entities[b]:
+                    break
+
+        self.recomputed_ic_per_step = [all_weights[t] for t in range(T)]
+        self.recomputed_rels_per_step = [all_rels[t] for t in range(T)]
+
+        # Compute mean IC per rollout (ignore sentinel 2.0)
+        mask_2 = (all_weights == 2.0)
+        w = all_weights.copy()
+        w[mask_2] = np.nan
+        ic_mean = np.nanmean(w, axis=0)
+        self.recomputed_ic_mean = np.nan_to_num(ic_mean, nan=0.0)
+
+        self._path_recomputed = True
+    ## END FIX IC DECISION
 
     #-- helper that will turn relation_history + visited_entities into a human-readable path string for each rollout, ready to send into get_reward_agenticAI() for persona scoring.
     def _build_paths_text(self, keep_idxs=None):
@@ -282,10 +357,12 @@ class Episode(object):
         rev_e = getattr(self.grapher, "rev_entity_vocab", None)
         rev_r = getattr(self.grapher, "rev_relation_vocab", None)
 
-        # Stack relation history into an array of shape [T, B]
-        rels = (np.array(self.relation_history, dtype=np.float32)
-                if self.relation_history
+        ## FIX IC DECISION - use recomputed relations from visited_entities + graph
+        self._recompute_from_path()
+        rels = (np.array(self.recomputed_rels_per_step, dtype=np.float32)
+                if self.recomputed_rels_per_step
                 else np.zeros((0, self.visited_entities.shape[0]), dtype=np.float32))
+        ## END FIX IC DECISION
 
         #NEW CODE - Helper to map entity numeric ID -> human-readable label
         # Flow: numeric ID -> rev_vocab -> vocab string (e.g. "Gene::134391") -> label (e.g. "SERPINC1")
@@ -644,7 +721,7 @@ class Episode(object):
         #if (not self.agentic_ai_enabled) or (_agentic_client is None) or (not self.persona_text):
         if (not self.agentic_ai_enabled) or (_call_llm is None) or (not self.persona_text):
             # keep logging arrays coherent so the rest of the pipeline/test logger works
-            #print("[INFO] Agentic AI disabled or client/persona missing; using IC-based rewards only.")
+            print("[INFO] Agentic AI disabled or client/persona missing; using IC-based rewards only.")
             #print(self.agentic_ai_enabled, _call_llm is None, not self.persona_text)
             self.agentic_scores = base.astype(np.float32)
             self.llm_dimensions = {}
@@ -810,39 +887,26 @@ class Episode(object):
         CALCULATE REWARD BASED ON THE POSITIVE REWARD AND THE AVERAGE WEIGHT (IC).
         USE '2.0' AS A SENTINEL FOR PADDING AND IGNORE IT IN THE MEAN.
         """
-        # 1) CONVERT THE LIST OF WEIGHT VECTORS INTO A 2D ARRAY: [TIME, BATCH]
-        weights_array = np.array(self.weight_history)  # SHAPE (T, B), WHERE T = # STEPS
+        ## FIX IC DECISION - use recomputed IC from visited_entities + graph
+        self._recompute_from_path()
+        weights_array = np.array(self.recomputed_ic_per_step)  # [T, B]
 
-        # 2) MAKE A MASK FOR THE PADDING (WHERE WE HAVE 2.0) 
-        #    'True' => IT IS PADDING, 'False' => REAL WEIGHT
         mask_2 = (weights_array == 2.0)
+        w = weights_array.copy()
+        w[mask_2] = np.nan
+        average_ic = np.nanmean(w, axis=0)  # [B]
+        size = np.sum(~mask_2, axis=0)       # [B]
+        ## END FIX IC DECISION
 
-        # 3) REPLACE 2.0 BY np.nan SO WE CAN IGNORE IT IN THE AVERAGE
-        weights_array[mask_2] = np.nan
-
-        # 4) CALCULATE THE MEAN ALONG AXIS=0 (ROLLOUT DIM), IGNORING NaN
-        average_ic = np.nanmean(weights_array, axis=0)  # SHAPE [B,]
-
-        # 5) CALCULATE SIZE OF THE PATHS
-        size = np.sum(~mask_2, axis=0)  # shape (B,)
-
-       # 6) GIVE A PENALTY TO THE SIZE OF THE PATH:
-        #    IF SIZE >= 3 => 0.5 (PENALIZE)
-        #    ELSE         => 1 (KEEP REWARD)
         punish_size = np.where(size >= 3, 0.5, 1)
-    
-        # 7) BUILD THE REWARD BASED ON SUCCESS
-        success_mask = (self.current_entities == self.end_entities)
 
-        # 8) CALCULATE REWARD
+        success_mask = (self.current_entities == self.end_entities)
 
         if self.weighted_reward==True and self.sigmoid==False:
             positive_part = self.positive_reward * average_ic
-            
         else:
             positive_part = self.positive_reward
 
-        # 9) BUILD THE FINAL REWARD
         condlist   = [success_mask, ~success_mask]
         choicelist = [positive_part, self.negative_reward]
         final_reward = np.select(condlist, choicelist)
@@ -1013,7 +1077,7 @@ class env(object):
                                                  edges_weight=params['edges_weight'])
 
             self.total_no_examples = self.batcher.store.shape[0]
-        self.grapher = RelationEntityGrapher(triple_store=params['data_input_dir'] + 'graph.txt',
+        self.grapher = RelationEntityGrapher(triple_store=params['data_input_dir'] + '/' + 'graph.txt',
                                              max_num_actions=params['max_num_actions'],
                                              entity_vocab=params['entity_vocab'],
                                              relation_vocab=params['relation_vocab'],

@@ -102,38 +102,40 @@ class Trainer(object):
         logger.info(f"Using device: {self.device}")
 
         self.agent = Agent(params)
-        print(f"[INIT] Agent created. load_model={params.get('load_model', False)}")
+        #print(f"[INIT] Agent created. load_model={params.get('load_model', False)}")
         self.set_random_seed(self.seed) # set random seed for reproducibility
         self.save_path = None
-        ## FIX TEST
+
+        ## FIX TEST - only build environments that are needed
         if not params.get('load_model', False):
-            self.train_environment = env(params, 'train') # train environment
-            self.dev_test_environment = env(params, 'dev') # dev environment
-            self.test_test_environment = env(params, 'test') # test environment
-            self.test_environment = self.dev_test_environment # default test environment
+            self.train_environment = env(params, 'train')
+            self.dev_test_environment = env(params, 'dev')
+            self.test_test_environment = env(params, 'test')
+            self.test_environment = self.dev_test_environment
             self.rev_relation_vocab = self.train_environment.grapher.rev_relation_vocab
             self.rev_entity_vocab = self.train_environment.grapher.rev_entity_vocab
         else:
-            # SKIP train env — only build test env for inference
-            self.test_test_environment = env(params, 'test') # test environment
+            self.test_test_environment = env(params, 'test')
             self.test_environment = self.test_test_environment
             self.rev_relation_vocab = self.test_test_environment.grapher.rev_relation_vocab
             self.rev_entity_vocab = self.test_test_environment.grapher.rev_entity_vocab
+        ## END FIX TEST
+
         self.max_hits_at_10 = 0 # Track max hits at 10
-        
-        # NEW Add early stopping variables 
+
+        # NEW Add early stopping variables
         self.best_metric = -1  # Track best MRR
         self.early_stopping = False
         self.waiting_period = 3  # Stop if no improvement for 3 evaluations
         self.current_waiting_period = self.waiting_period
-        
-        
+
+
         self.ePAD = self.entity_vocab['PAD'] # entity padding index
         self.rPAD = self.relation_vocab['PAD'] # relation padding index
 
         # Initialize baseline for reward adjustment and optimizer
         self.baseline = ReactiveBaseline(l=self.Lambda)
-        self.optimizer = torch.optim.Adam(self.agent.parameters(), lr=self.learning_rate) # //NOTE: before we didnt pass parameters to the optimizer
+        self.optimizer = torch.optim.Adam(self.agent.parameters(), lr=self.learning_rate)
 
         self.global_step_tensor = 0  # Track global step for learning rate decay
 
@@ -167,8 +169,22 @@ class Trainer(object):
         start_name = self.rev_entity_vocab[episode.start_entities[b * self.test_rollouts]]
         end_name   = self.rev_entity_vocab[episode.end_entities[b * self.test_rollouts]]
 
-        # Path-level IC (mean) – computed in Episode._cache_ic_summaries()
-        ic_mean = float(episode.ic_mean[indx]) if hasattr(episode, "ic_mean") else None
+        ## FIX IC MEAN - recompute ic_mean from the final path (entity_trajectory)
+        ## instead of using potentially misaligned weight_history
+        ent_names = [self.rev_entity_vocab[e] for e in p['entities']]
+        rel_names = [self.rev_relation_vocab[rr] for rr in p['relations']]
+        edges_weight = episode.grapher.edges_weight
+        ic_weights = []
+        for i, rel in enumerate(rel_names):
+            e1, e2 = ent_names[i], ent_names[i + 1]
+            if rel in edges_weight:
+                w_e1 = edges_weight[rel].get(e1, 0.5)
+                w_e2 = edges_weight[rel].get(e2, 0.5)
+                ic_weights.append((w_e1 + w_e2) / 2)
+            else:
+                ic_weights.append(0.5)
+        ic_mean = sum(ic_weights) / len(ic_weights) if ic_weights else 0.0
+        ## END FIX IC MEAN
 
         agentic_score = float(episode.agentic_scores[indx]) if episode.agentic_scores is not None else 0.0
         entry = {
@@ -176,8 +192,8 @@ class Trainer(object):
             "agentic_score": agentic_score,
             "reward_kind": (episode.reward_kind[indx] if hasattr(episode, "reward_kind") else "n/a"),
             "path": {
-                "entities":  [self.rev_entity_vocab[e]   for e  in p['entities']],
-                "relations": [self.rev_relation_vocab[rr] for rr in p['relations']],
+                "entities":  ent_names,
+                "relations": rel_names,
             },
             "ic_mean": ic_mean,
         }
@@ -466,17 +482,17 @@ class Trainer(object):
             #self.summary_writer.add_scalar('avg_positive_reward', avg_positive_reward, self.batch_counter)
             #self.summary_writer.add_scalar('mean_total_reward', mean_total_reward, self.batch_counter)
             #self.summary_writer.add_scalar('train_loss', train_loss, self.batch_counter)
-            #self.summary_writer.add_scalar('avg_ep_correct', (num_ep_correct / self.batch_size), 
-              #                            self.batch_counter)
+            #self.summary_writer.add_scalar('avg_ep_correct', (num_ep_correct / self.batch_size),
+            #                              self.batch_counter)
             
             # Evaluate model periodically (ONLY ONCE!)
             if self.batch_counter % self.eval_every == 0:
                 with open(self.output_dir + '/scores.txt', 'a') as score_file:
                     score_file.write("Score for iteration " + str(self.batch_counter) + "\n")
                 
-                #os.mkdir(self.path_logger_file + "/" + str(self.batch_counter))
+                #os.mkdir(self.path_logger_file + "/" + str(self.batch_counter))  # FIX TEST - removed numbered folders
                 #self.path_logger_file_ = self.path_logger_file + "/" + str(self.batch_counter) + "/paths"
-
+                
                 current_mrr = self.test(beam=True, print_paths=False)
             
             # Check early stopping
@@ -612,13 +628,6 @@ class Trainer(object):
                     episode.done_mask        = episode.done_mask[y]
                     episode.current_entities = episode.current_entities[y]
 
-                    ## FIX IC MEAN
-                    for j in range(len(episode.weight_history)):
-                        episode.weight_history[j] = episode.weight_history[j][y]
-                    for j in range(len(episode.relation_history)):
-                        episode.relation_history[j] = episode.relation_history[j][y]
-                    ## END FIX IC MEAN
-
                     y += np.repeat([b*k for b in range(temp_batch_size)], k)
                     state['current_entities'] = state['current_entities'][y]
                     state['next_relations'] = state['next_relations'][y,:]
@@ -718,7 +727,7 @@ class Trainer(object):
                     AP += 1.0/((answer_pos+1))
 
                 if print_paths:
-                    qr = self.rev_relation_vocab[self.qr[b * self.test_rollouts]] #FIX TEST
+                    qr = self.rev_relation_vocab[self.qr[b * self.test_rollouts]]  ## FIX TEST
                     start_e = self.rev_entity_vocab[episode.start_entities[b * self.test_rollouts]]
                     end_e = self.rev_entity_vocab[episode.end_entities[b * self.test_rollouts]]
                     paths[str(qr)].append(str(start_e) + "\t" + str(end_e) + "\n")
@@ -989,6 +998,7 @@ if __name__ == '__main__':
         output_dir = trainer.output_dir
 
     else:
+        #SKIP TRAINING - load model directly
         logger.info("Skipping training")
         logger.info("Loading model from {}".format(options["model_load_dir"]))
         save_path = options["model_load_dir"]
@@ -1012,28 +1022,29 @@ if __name__ == '__main__':
     trainer.test_environment = trainer.test_test_environment
     trainer.test_environment.test_rollouts = 100
 
-    ##-- NEW 
     # Infer directory and read sidecar
     ckpt_dir = os.path.dirname(save_path)
     sidecar = os.path.join(ckpt_dir, "best_ckpt.json")
 
     best_step = 0
+    model = save_path  # default to save_path
     if os.path.exists(sidecar):
         try:
             with open(sidecar, "r", encoding="utf-8") as f:
                 meta = json.load(f)
             best_step = int(meta.get("best_step", 0))
-            model = meta.get("model_path")
-            ## FIX TEST - resolve relative model path to absolute
-            if model and not os.path.isabs(model):
-                model = os.path.join(os.getcwd(), model)
-            ## END FIX TEST
+            model = meta.get("model_path", save_path)
             th = float(meta.get("threshold", threshold_for_step(best_step)))
             logger.info(f"[TEST] Using best_step={best_step} → threshold={th:.2f} (from {sidecar})")
         except Exception as e:
             logger.warning(f"[TEST] Failed to read {sidecar}: {e}; defaulting step=0, threshold={threshold_for_step(0):.2f}")
     else:
         logger.warning(f"[TEST] {sidecar} not found; defaulting step=0, threshold={threshold_for_step(0):.2f}")
+
+    ## FIX TEST - resolve relative model path to absolute
+    if model and not os.path.isabs(model):
+        model = os.path.join(os.getcwd(), model)
+    ## END FIX TEST
 
     ## FIX TEST - fallback if model_path not found
     if not model or not os.path.exists(model):
@@ -1055,5 +1066,5 @@ if __name__ == '__main__':
         for subfolder in os.listdir(path_logger_file):
             subfolder_path = os.path.join(path_logger_file, subfolder)
             if os.path.isdir(subfolder_path) and not os.listdir(subfolder_path):
-                shutil.rmtree(subfolder_path)  # Remove empty folder if it exists
+                shutil.rmtree(subfolder_path)
 

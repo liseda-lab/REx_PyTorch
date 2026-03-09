@@ -4,3 +4,5 @@ code/data/other_codes/input_files_lca/NCIT_HETIONET_DAG.pkl
 code/data/other_codes/input_files_lca/graph_labels.tsv
 datasets/primekg/drug_target/graph.txt
 datasets/hetionet/drug_repurposing/graph.txt
+output/
+code/model/__pycache__/

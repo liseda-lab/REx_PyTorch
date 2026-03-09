@@ -25,7 +25,7 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 #tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR) 
 
-from torch.utils.tensorboard import SummaryWriter
+#from torch.utils.tensorboard import SummaryWriter
 
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
@@ -128,9 +128,9 @@ class Trainer(object):
 
         self.global_step_tensor = 0  # Track global step for learning rate decay
 
-        self.tensorboard_dir = tensorboard_dir
+        #self.tensorboard_dir = tensorboard_dir
 
-        self.summary_writer = SummaryWriter(log_dir=self.tensorboard_dir)
+        #self.summary_writer = SummaryWriter(log_dir=self.tensorboard_dir)
 
     def set_random_seed(self, seed):
         """
@@ -453,11 +453,11 @@ class Trainer(object):
                        format(self.batch_counter, np.sum(rewards), avg_reward, num_ep_correct,
                              (num_ep_correct / self.batch_size), train_loss))
 
-            self.summary_writer.add_scalar('avg_reward_per_batch', avg_reward, self.batch_counter)
-            self.summary_writer.add_scalar('avg_positive_reward', avg_positive_reward, self.batch_counter)
-            self.summary_writer.add_scalar('mean_total_reward', mean_total_reward, self.batch_counter)
-            self.summary_writer.add_scalar('train_loss', train_loss, self.batch_counter)
-            self.summary_writer.add_scalar('avg_ep_correct', (num_ep_correct / self.batch_size), 
+            #self.summary_writer.add_scalar('avg_reward_per_batch', avg_reward, self.batch_counter)
+            #self.summary_writer.add_scalar('avg_positive_reward', avg_positive_reward, self.batch_counter)
+            #self.summary_writer.add_scalar('mean_total_reward', mean_total_reward, self.batch_counter)
+            #self.summary_writer.add_scalar('train_loss', train_loss, self.batch_counter)
+            #self.summary_writer.add_scalar('avg_ep_correct', (num_ep_correct / self.batch_size), 
                                           self.batch_counter)
             
             # Evaluate model periodically (ONLY ONCE!)

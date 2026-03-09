@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+data_input_dir="datasets/oregano/drug_repurposing/"
+vocab_dir="datasets/oregano/drug_repurposing/vocab"
+total_iterations=150
+path_length=4
+hidden_size=32
+embedding_size=32
+batch_size=128
+learning_rate=0.0006
+beta=0.05
+num_rollouts=30
+LSTM_layers=2
+base_output_dir="output/oregano/drug_repurposing/mechanistic_analyst/"
+Lambda=0.02
+eval_every=10
+use_entity_embeddings=1
+train_entity_embeddings=1
+train_relation_embeddings=1
+max_num_actions=400
+size_flexibility=1
+weighted_reward=1
+load_model=1
+model_load_dir= "saved_models/oregano/drug_repurposing/mechanistic_analyst/best_ckpt.json"
+#tensorboard_dir="tensorboard/oregano_mechanistic_analyst_DR/"
+agentic_ai_enabled=1
+persona_path="personas/mechanistic_analyst.txt"

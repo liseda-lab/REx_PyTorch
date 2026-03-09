@@ -52,13 +52,13 @@ Where:
 - The vocab files are created by using the `create_vocab.py` file.
 
 
-**Note1**: The existing dataset has the graph.txt file divided into one or more files. Just run the following command in the dataset directory:
+**Note1**: The existing datasets have the graph.txt file divided into one or more files. Just run the following command in the dataset directory:
 
 ```sh
 cat graph_part*.txt > graph.txt
 ```
 
-**Note2**: Current code downloads and uses a local version of the Qwen3.5 9B large language model via the HF Transformers library for the adaptive version of REx. Testing was done using an RTX 5090 GPU. GPUs with less VRAM will not be able to load both the LLM and the REx system onto GPU. If using an API for LLM calls, execution can be achieved on any system, even without a GPU.  
+**Note2**: Current uses a local version of the Qwen3.5 9B large language model via the HF Transformers library for the adaptive version of REx. Testing was done using an RTX 5090 GPU. GPUs with less VRAM will not be able to load both the LLM and the REx system onto GPU. If using an API for LLM calls, execution can be achieved on any system, even without a GPU.  
 
 ### Authors
 - __Diogo Venes__

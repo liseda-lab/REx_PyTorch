@@ -95,7 +95,7 @@ def configure_logger(log_file_path):
 
 
 class Trainer(object):
-    def __init__(self, params, tensorboard_dir):
+    def __init__(self, params, tensorboard_dir=None):
         for key, val in params.items(): setattr(self, key, val); 
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -458,7 +458,7 @@ class Trainer(object):
             #self.summary_writer.add_scalar('mean_total_reward', mean_total_reward, self.batch_counter)
             #self.summary_writer.add_scalar('train_loss', train_loss, self.batch_counter)
             #self.summary_writer.add_scalar('avg_ep_correct', (num_ep_correct / self.batch_size), 
-                                          self.batch_counter)
+              #                            self.batch_counter)
             
             # Evaluate model periodically (ONLY ONCE!)
             if self.batch_counter % self.eval_every == 0:
@@ -981,7 +981,7 @@ if __name__ == '__main__':
         #output_dir = trainer.output_dir
     
     #TRAINING
-    trainer = Trainer(options, tensorboard_dir=options['tensorboard_dir'])
+    trainer = Trainer(options)
     trainer.train()
     save_path = trainer.save_path
     path_logger_file = trainer.path_logger_file

@@ -1013,7 +1013,7 @@ class env(object):
                                                  edges_weight=params['edges_weight'])
 
             self.total_no_examples = self.batcher.store.shape[0]
-        self.grapher = RelationEntityGrapher(triple_store=params['data_input_dir'] + '/' + 'graph.txt',
+        self.grapher = RelationEntityGrapher(triple_store=params['data_input_dir'] + 'graph.txt',
                                              max_num_actions=params['max_num_actions'],
                                              entity_vocab=params['entity_vocab'],
                                              relation_vocab=params['relation_vocab'],

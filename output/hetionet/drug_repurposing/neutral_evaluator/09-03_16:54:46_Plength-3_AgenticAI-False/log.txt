@@ -1,0 +1,4 @@
+03/09/2026 04:54:46 PM: [ reading vocab files... ]
+03/09/2026 04:54:47 PM: [ Total number of entities 45160 ]
+03/09/2026 04:54:47 PM: [ Total number of relations 51 ]
+03/09/2026 04:54:47 PM: [ Using device: cpu ]

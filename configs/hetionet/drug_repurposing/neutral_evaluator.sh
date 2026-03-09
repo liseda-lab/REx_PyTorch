@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-data_input_dir="datasets/hetionet_/drug_repurposing/"
-vocab_dir="datasets/hetionet_/drug_repurposing/vocab"
+data_input_dir="datasets/hetionet/drug_repurposing/"
+vocab_dir="datasets/hetionet/drug_repurposing/vocab"
 total_iterations=200
 path_length=3
 hidden_size=32
@@ -20,7 +20,7 @@ max_num_actions=400
 size_flexibility=1
 weighted_reward=1
 load_model=1
-model_load_dir= "saved_models/hetionet/drug_repurposing/neutral_evaluator/best_ckpt.json"
+model_load_dir="saved_models/hetionet/drug_repurposing/neutral_evaluator/best_ckpt.json"
 #tensorboard_dir="tensorboard/hetionet_neutral_evaluator_DR/"
 agentic_ai_enabled=0
 persona_path=None

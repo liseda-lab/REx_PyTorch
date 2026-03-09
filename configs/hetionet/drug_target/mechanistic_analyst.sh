@@ -20,7 +20,7 @@ max_num_actions=400
 size_flexibility=1
 weighted_reward=1
 load_model=1
-model_load_dir= "saved_models/hetionet/drug_target/mechanistic_analyst/best_ckpt.json"
+model_load_dir="saved_models/hetionet/drug_target/mechanistic_analyst/best_ckpt.json"
 #tensorboard_dir="tensorboard/hetionet_mechanistic_analyst_dt/"
 
 agentic_ai_enabled=1

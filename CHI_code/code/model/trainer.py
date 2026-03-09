@@ -963,6 +963,23 @@ if __name__ == '__main__':
     logger.info('Total number of relations {}'.format(len(options['relation_vocab'])))
     save_path = ''
 
+    # Code to allow for loading of existing model, uncomment this and comment the next two code blocks titled #TRAINING and #TESTING
+    #trainer = Trainer(options, tensorboard_dir=options['tensorboard_dir'])
+    #if not options['load_model']:
+        #TRAINING
+        #trainer = Trainer(options, tensorboard_dir=options['tensorboard_dir'])
+        #trainer.train()
+        #save_path = trainer.save_path
+        #path_logger_file = trainer.path_logger_file
+        #output_dir = trainer.output_dir
+
+    #else:
+        #logger.info("Skipping training")
+        #logger.info("Loading model from {}".format(options["model_load_dir"]))
+        #save_path = options["model_load_dir"]
+        #path_logger_file = trainer.path_logger_file
+        #output_dir = trainer.output_dir
+    
     #TRAINING
     trainer = Trainer(options, tensorboard_dir=options['tensorboard_dir'])
     trainer.train()

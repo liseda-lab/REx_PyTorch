@@ -60,7 +60,7 @@ cat graph_part*.txt > graph.txt
 
 **Note2**: This REx implementation already includes a new approach called Adaptive REx, but it's not enabled by default. More details will be here soon. The parameter is `agentic_ai_enabled`, which is used to enable or disable the use of agentic AI and personalization of explanations. 
 
-**Note3**: Current code downloads and uses a local version of the Qwen3.5 9B large language model via the HF Transformers library. Testing was done using a RTX 5090 GPU. GPUs with less VRAM will not be able to load both the LLM and the REx system onto GPU. If using an API for LLM calls, execution can be achieved on any system, even without a GPU.  
+**Note3**: Current code downloads and uses a local version of the Qwen3.5 9B large language model via the HF Transformers library for the adaptive version of REx. Testing was done using a RTX 5090 GPU. GPUs with less VRAM will not be able to load both the LLM and the REx system onto GPU. If using an API for LLM calls, execution can be achieved on any system, even without a GPU.  
 
 ### Authors
 - __Diogo Venes__

@@ -1,5 +1,5 @@
 # REx_PyTorch
-Extension of REx with port for PyTorch. The original implementation of REx can be found [here] (https://github.com/liseda-lab/REx). 
+Extension of REx with port for PyTorch. The original implementation of REx can be found [here](https://github.com/liseda-lab/REx). 
 
 ## Guide to run the system
 

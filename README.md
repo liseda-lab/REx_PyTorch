@@ -1,5 +1,6 @@
 # REx_PyTorch
-REx with port for PyTorch. The original implementation of REx can be found [here](https://github.com/liseda-lab/REx). This REx implementation already includes a new approach called Adaptive REx, but to use the original REX, just choose the `neutral_evaluator` file inside configs. More details will be here soon.
+
+This is the pytorch implementation for the REx [paper](https://www.ijcai.org/proceedings/2025/0515.pdf). The original implementation of REx can be found [here](https://github.com/liseda-lab/REx). This REx implementation already includes a new approach called Adaptive REx, but to use the original REX, just choose the `neutral_evaluator` file inside configs. More details will be here soon.
 
 ## Guide to run the system
 

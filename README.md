@@ -11,32 +11,21 @@ The main differences from CHI with the original REx implementation are:
 Folder with CHI code and REx code will be deleted in the future when the new code is stable.
 
 
-## guide to use both codes (to be deleted when the code is more stable):
+## Guide to run the system
 
 ### Prerequisites
-- Docker installed on your machine
+- UV installed on your machine
 
-### Building the Docker Image
-To build the Docker image, use the provided `Dockerfile`. Run the following command in the root directory of the project:
-
-```sh
-docker build -t REX-image .
-```
-Start a container from the built image:
+### Installing dependencies
+To install the necessary dependencies, provided UV is installed, simply run the following command: 
 
 ```sh
-docker run --gpus all -d --name rex_space -v $(pwd):/REx REX-image tail -f /dev/null
-
+uv sync
 ```
 
-Create an interactive shell in the container to run commands:
-
-```sh
-docker exec -it rex_space bash
-```
 
 ### Running
-Once inside the container, to run it, you will need to run the following command:
+Once inside the folder, to run it, you will need to run the following command:
 
 ```sh
 uv run bash run.sh configs/{dataset}
@@ -52,6 +41,8 @@ dataset
     ├── dev.txt
     ├── test.txt
     ├── train.txt
+    ├── graph_labels.tsv
+    ├── edge_labels.tsv
     └── clustered_IC_classes_edgeType.json
     └── vocab
         └── entity_vocab.json
@@ -63,6 +54,8 @@ Where:
 - `dev.txt` contains all validation triples.
 - `test.txt` contains all test triples.
 - `train.txt` contains all train triples.
+- - `graph_labels.tsv` contains human-readable labels for nodes.
+- `edge_labels.tsv` contains human-readable labels for edges.
 - `clustered_IC_classes_edgeType.json` contains the IC scores for each edge types of the graph. It is a dictionary where the keys are the edge types and the values are dictionaries with the IC scores for each class.
 - `vocab/entity_vocab.json` contains the vocabulary for the entities.
 - `vocab/relation_vocab.json` contains the vocabulary for the relations.

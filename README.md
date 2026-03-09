@@ -1,5 +1,6 @@
 # REx_PyTorch
-Extension of REx with port for PyTorch. The original implementation of REx can be found [here](https://github.com/liseda-lab/REx). 
+
+This is the pytorch implementation for the REx [paper](https://www.ijcai.org/proceedings/2025/0515.pdf). The original implementation of REx can be found [here](https://github.com/liseda-lab/REx). This REx implementation already includes a new approach called Adaptive REx, but to use the original REX, just choose the `neutral_evaluator` file inside configs. More details will be here soon.
 
 ## Guide to run the system
 
@@ -18,10 +19,10 @@ uv sync
 Once inside the folder, to run it, you will need to run the following command:
 
 ```sh
-uv run bash run.sh configs/{dataset}/{task}
+uv run bash run.sh configs/{dataset}/{task}/{persona}
 ```
 
-Where `{dataset}` is the name of the dataset you would like to run the approach on and `{task}`is drug_repurposing or drug_target_interaction.
+Where `{dataset}` is the name of the dataset you would like to run the approach on, and `{task}`is drug_repurposing or drug_target (interaction). `{persona}` is an extension of REx for adaptive explanations, for the original implementation of REx always choose `neutral_evaluator`.  Take this example: `uv run bash run.sh configs/hetionet/drug_repurposing/neutral_evaluator.sh`
 
 ### Datasets 
 Datasets should have the following files:
@@ -52,15 +53,13 @@ Where:
 - The vocab files are created by using the `create_vocab.py` file.
 
 
-**Note1**: The existing dataset has the graph.txt file divided into one or more files. Just run the following command in the dataset directory:
+**Note1**: The existing datasets have the graph.txt file divided into one or more files. Just run the following command in the dataset directory:
 
 ```sh
 cat graph_part*.txt > graph.txt
 ```
 
-**Note2**: This REx implementation already includes a new approach called Adaptive REx, but it's not enabled by default. More details will be here soon. The parameter is `agentic_ai_enabled`, which is used to enable or disable the use of agentic AI and personalization of explanations. 
-
-**Note3**: Current code downloads and uses a local version of the Qwen3.5 9B large language model via the HF Transformers library for the adaptive version of REx. Testing was done using an RTX 5090 GPU. GPUs with less VRAM will not be able to load both the LLM and the REx system onto GPU. If using an API for LLM calls, execution can be achieved on any system, even without a GPU.  
+**Note2**: Current uses a local version of the Qwen3.5 9B large language model via the HF Transformers library for the adaptive version of REx. Testing was done using an RTX 5090 GPU. GPUs with less VRAM will not be able to load both the LLM and the REx system onto GPU. If using an API for LLM calls, execution can be achieved on any system, even without a GPU.  
 
 ### Authors
 - __Diogo Venes__
@@ -71,5 +70,3 @@ cat graph_part*.txt > graph.txt
 
 For any comments or help needed, please send an email to: scnunes@ciencias.ulisboa.pt
 
-## Acknowledgments
-This work was supported by FCT through the fellowship 2023.00653.BD, and the LASIGE Research Unit, ref. UID/00408/2025. It was also partially supported by the KATY project (European Union Horizon 2020 grant No. 101017453), and by the CancerScan project which received funding from the European Union’s Horizon Europe Research and Innovation Action (EIC Pathfinder Open) under grant agreement No. 101186829. Views and opinions expressed are however those of the author(s) only and do not necessarily reflect those of the European Union or the European Innovation Council and SMEs Executive Agency. Neither the European Union nor the granting authority can be held responsible for them.

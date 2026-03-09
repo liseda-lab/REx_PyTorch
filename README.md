@@ -11,7 +11,7 @@ The main differences from CHI with the original REx implementation are:
 Folder with CHI code and REx code will be deleted in the future when the new code is stable.
 
 
-## guide to use both codes (to be deleted when the code is more stable):
+## Guide to run the system
 
 ### Prerequisites
 - UV installed on your machine

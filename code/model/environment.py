@@ -803,37 +803,37 @@ class Episode(object):
                     self.reward_kind[idx] = 'high_default'
                     
             else:
-                # Process LLM scores
+                # Process LLM scores — blend IC + LLM so neither dominates
+                ALPHA = 0.5  # weight for IC; (1-ALPHA) for LLM
                 for idx, scores in zip(high_ic_idxs, scores_list):
                     sv = float(scores["validity"])
                     comp_raw = float(scores["completeness"])
                     rel = float(scores["relevance"])
-                    
-                    # Print raw LLM scores
-                    #print(f"  Path {idx}: V={sv:.1f}, C={comp_raw:.1f}, R={rel:.1f}", end="")
-                    
+
                     comp_conv = COMPLETENESS_MAP[int(comp_raw)]
                     raw = wV * sv + wC * comp_conv + wR * rel
-                    
-                    final_norm = (raw - 1.0) / 4.0
-                    final_norm = float(max(0.0, min(1.0, final_norm)))
-                    
-                    #print(f" → reward={final_norm:.3f}")
-                    
-                    out[idx] = final_norm
-                    self.agentic_scores[idx] = final_norm     
-                    self.reward_kind[idx] = 'llm'   
-                
+
+                    llm_norm = (raw - 1.0) / 4.0
+                    llm_norm = float(max(0.0, min(1.0, llm_norm)))
+
+                    # Blend: IC ensures structural quality, LLM adds persona judgement
+                    ic_val = float(self.ic_mean[idx])
+                    final_blend = ALPHA * ic_val + (1 - ALPHA) * llm_norm
+
+                    out[idx] = final_blend
+                    self.agentic_scores[idx] = final_blend
+                    self.reward_kind[idx] = 'llm+ic'
+
                     # Store the individual dimensions for LLM-scored paths
                     self.llm_dimensions[idx] = {
                         'validity': sv,
                         'completeness_conv': comp_conv,
                         'relevance': rel,
-                        'ic_mean': float(self.ic_mean[idx])   
-
+                        'ic_mean': ic_val,
+                        'llm_score': llm_norm,
                     }
 
-                    llm_rewards.append(final_norm)
+                    llm_rewards.append(final_blend)
 
                 # Summary statistics
                 if llm_rewards:

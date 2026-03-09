@@ -186,20 +186,25 @@ class Trainer(object):
         ic_mean = sum(ic_weights) / len(ic_weights) if ic_weights else 0.0
         ## END FIX IC MEAN
 
-        agentic_score = float(episode.agentic_scores[indx]) if episode.agentic_scores is not None else 0.0
+        # final_score = the actual reward used (blend for LLM paths, IC for others)
+        final_score = float(episode.agentic_scores[indx]) if episode.agentic_scores is not None else 0.0
+        reward_kind = episode.reward_kind[indx] if hasattr(episode, "reward_kind") else "n/a"
+
         entry = {
             "beam_logprob": float(self.log_probs[b, r]),
-            "agentic_score": agentic_score,
-            "reward_kind": (episode.reward_kind[indx] if hasattr(episode, "reward_kind") else "n/a"),
+            "final_score": final_score,
+            "reward_kind": reward_kind,
+            "ic_mean": ic_mean,
             "path": {
                 "entities":  ent_names,
                 "relations": rel_names,
             },
-            "ic_mean": ic_mean,
         }
 
+        # For LLM-scored paths, add the raw LLM score and dimensions
         if indx in episode.llm_dimensions:
             dims = episode.llm_dimensions[indx]
+            entry["llm_score"] = float(dims.get("llm_score", 0.0))
             entry["llm_dimensions"] = {
                 "validity": float(dims["validity"]),
                 "completeness_conv": float(dims["completeness_conv"]),
@@ -908,11 +913,11 @@ class Trainer(object):
         self.log_results(final_rewards)
 
         # Sort by agentic score (desc) and write JSON
-        # Grouped JSON output: sort each [start][end] list by agentic_score desc
+        # Grouped JSON output: sort each [start][end] list by final_score desc
         if correct_groups:
             for s, ends in correct_groups.items():
                 for e, lst in ends.items():
-                    lst.sort(key=lambda x: x["agentic_score"], reverse=True)
+                    lst.sort(key=lambda x: x["final_score"], reverse=True)
 
             json_path = self.path_logger_file_ + "_correct_grouped.json"
             with open(json_path, "w", encoding="utf-8") as f:

@@ -10,7 +10,7 @@ learning_rate=0.0006
 beta=0.05
 num_rollouts=30
 LSTM_layers=2
-base_output_dir="output/hetionet_leo_DR_bestThreshold/"
+base_output_dir="output/hetionet/drug_repurposing/insigth_driven"
 Lambda=0.02
 eval_every=10
 use_entity_embeddings=1
@@ -21,7 +21,6 @@ size_flexibility=1
 weighted_reward=1
 load_model=0
 model_load_dir=None
-tensorboard_dir="tensorboard/hetionet_leo_DR/"
 
 agentic_ai_enabled=1
-persona_path="personas/leo_insight.txt"
+persona_path="personas/insigth_driven.txt"

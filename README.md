@@ -18,10 +18,10 @@ uv sync
 Once inside the folder, to run it, you will need to run the following command:
 
 ```sh
-uv run bash run.sh configs/{dataset}
+uv run bash run.sh configs/{dataset}/{task}
 ```
 
-Where `{dataset}` is the name of the dataset you would like to run the approach on. 
+Where `{dataset}` is the name of the dataset you would like to run the approach on and `{task}`is drug_repurposing or drug_target_interaction.
 
 ### Datasets 
 Datasets should have the following files:
@@ -58,7 +58,7 @@ Where:
 cat graph_part*.txt > graph.txt
 ```
 
-**Note2**: The CHI code can be used for normal REx too. In the config files there is a parameter called `agentic_ai_enabled`. This parameter is used to enable or disable the use of agentic AI for the CHI paper and can be turned off. 
+**Note2**: This REx implementation already includes a new approach called Adaptive REx, but it's not enabled by default. More details will be here soon. The parameter is `agentic_ai_enabled`, which is used to enable or disable the use of agentic AI and personalization of explanations. 
 
 
 ### Authors
@@ -68,7 +68,7 @@ cat graph_part*.txt > graph.txt
 
 
 
-For any comments or help needed, please send an email to: to be added (Diogo Venes)
+For any comments or help needed, please send an email to: scnunes@ciencias.ulisboa.pt
 
 ## Acknowledgments
-To be added.
+This work was supported by FCT through the fellowship 2023.00653.BD, and the LASIGE Research Unit, ref. UID/00408/2025. It was also partially supported by the KATY project (European Union Horizon 2020 grant No. 101017453), and by the CancerScan project which received funding from the European Union’s Horizon Europe Research and Innovation Action (EIC Pathfinder Open) under grant agreement No. 101186829. Views and opinions expressed are however those of the author(s) only and do not necessarily reflect those of the European Union or the European Innovation Council and SMEs Executive Agency. Neither the European Union nor the granting authority can be held responsible for them.

@@ -16,7 +16,6 @@ cmd="python code/model/trainer.py --base_output_dir $base_output_dir \
     --load_model $load_model --total_iterations $total_iterations \
     --weighted_reward $weighted_reward \
     --size_flexibility $size_flexibility \
-    --tensorboard_dir $tensorboard_dir \
     --agentic_ai_enabled $agentic_ai_enabled \
     --persona_path $persona_path"
 

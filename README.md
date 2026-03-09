@@ -54,7 +54,7 @@ Where:
 - `dev.txt` contains all validation triples.
 - `test.txt` contains all test triples.
 - `train.txt` contains all train triples.
-- - `graph_labels.tsv` contains human-readable labels for nodes.
+- `graph_labels.tsv` contains human-readable labels for nodes.
 - `edge_labels.tsv` contains human-readable labels for edges.
 - `clustered_IC_classes_edgeType.json` contains the IC scores for each edge types of the graph. It is a dictionary where the keys are the edge types and the values are dictionaries with the IC scores for each class.
 - `vocab/entity_vocab.json` contains the vocabulary for the entities.

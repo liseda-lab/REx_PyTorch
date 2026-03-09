@@ -69,5 +69,3 @@ cat graph_part*.txt > graph.txt
 
 For any comments or help needed, please send an email to: scnunes@ciencias.ulisboa.pt
 
-## Acknowledgments
-This work was supported by FCT through the fellowship 2023.00653.BD, and the LASIGE Research Unit, ref. UID/00408/2025. It was also partially supported by the KATY project (European Union Horizon 2020 grant No. 101017453), and by the CancerScan project which received funding from the European Union’s Horizon Europe Research and Innovation Action (EIC Pathfinder Open) under grant agreement No. 101186829. Views and opinions expressed are however those of the author(s) only and do not necessarily reflect those of the European Union or the European Innovation Council and SMEs Executive Agency. Neither the European Union nor the granting authority can be held responsible for them.

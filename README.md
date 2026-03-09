@@ -21,7 +21,7 @@ Once inside the folder, to run it, you will need to run the following command:
 uv run bash run.sh configs/{dataset}/{task}/{persona}
 ```
 
-Where `{dataset}` is the name of the dataset you would like to run the approach on, and `{task}`is drug_repurposing or drug_target (interaction). `{persona}` is an extension of REx for adaptive explanations, for the original implementation of REx choose non_evaluator. 
+Where `{dataset}` is the name of the dataset you would like to run the approach on, and `{task}`is drug_repurposing or drug_target (interaction). `{persona}` is an extension of REx for adaptive explanations, for the original implementation of REx always choose `neutral_evaluator`. 
 
 ### Datasets 
 Datasets should have the following files:

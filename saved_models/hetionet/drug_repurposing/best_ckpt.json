@@ -1,0 +1,6 @@
+{
+  "best_step": 70,
+  "threshold": 0.55,
+  "timestamp": 1772987244.538277,
+  "model_path": "saved_models/hetionet/drug_repurposing/model.ckpt"
+}

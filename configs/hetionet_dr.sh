@@ -21,7 +21,7 @@ size_flexibility=1
 weighted_reward=1
 load_model=0
 model_load_dir=None
-tensorboard_dir="tensorboard/hetionet_leo_DR/"
+#tensorboard_dir="tensorboard/hetionet_leo_DR/"
 
 agentic_ai_enabled=1
 persona_path="personas/leo_insight.txt"

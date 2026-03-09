@@ -124,7 +124,7 @@ class Agent(nn.Module):
             chosen_relation: Relation corresponding to the chosen action.
         """
 
-        print("Entered agent step function")
+       # print("Entered agent step function")
 
         # Compute embeddings for the previous action
         prev_action_embedding = self.action_encoder(prev_relation, current_entities)

@@ -101,15 +101,24 @@ class Trainer(object):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         logger.info(f"Using device: {self.device}")
 
-        self.agent = Agent(params) 
+        self.agent = Agent(params)
+        print(f"[INIT] Agent created. load_model={params.get('load_model', False)}")
         self.set_random_seed(self.seed) # set random seed for reproducibility
         self.save_path = None
-        self.train_environment = env(params, 'train') # train environment
-        self.dev_test_environment = env(params, 'dev') # dev environment
-        self.test_test_environment = env(params, 'test') # test environment
-        self.test_environment = self.dev_test_environment # default test environment
-        self.rev_relation_vocab = self.train_environment.grapher.rev_relation_vocab
-        self.rev_entity_vocab = self.train_environment.grapher.rev_entity_vocab
+        ## FIX TEST
+        if not params.get('load_model', False):
+            self.train_environment = env(params, 'train') # train environment
+            self.dev_test_environment = env(params, 'dev') # dev environment
+            self.test_test_environment = env(params, 'test') # test environment
+            self.test_environment = self.dev_test_environment # default test environment
+            self.rev_relation_vocab = self.train_environment.grapher.rev_relation_vocab
+            self.rev_entity_vocab = self.train_environment.grapher.rev_entity_vocab
+        else:
+            # SKIP train env — only build test env for inference
+            self.test_test_environment = env(params, 'test') # test environment
+            self.test_environment = self.test_test_environment
+            self.rev_relation_vocab = self.test_test_environment.grapher.rev_relation_vocab
+            self.rev_entity_vocab = self.test_test_environment.grapher.rev_entity_vocab
         self.max_hits_at_10 = 0 # Track max hits at 10
         
         # NEW Add early stopping variables 
@@ -381,7 +390,7 @@ class Trainer(object):
             action_idx_list = []
             
             for i in range(self.path_length):
-                print(f"Processing step {i}/{self.path_length} of episode {self.batch_counter}")
+                #print(f"Processing step {i}/{self.path_length} of episode {self.batch_counter}")
                 next_relations = torch.tensor(state['next_relations'], 
                                             dtype=torch.long, device=self.device)
                 next_entities = torch.tensor(state['next_entities'], 
@@ -465,9 +474,9 @@ class Trainer(object):
                 with open(self.output_dir + '/scores.txt', 'a') as score_file:
                     score_file.write("Score for iteration " + str(self.batch_counter) + "\n")
                 
-                os.mkdir(self.path_logger_file + "/" + str(self.batch_counter))
-                self.path_logger_file_ = self.path_logger_file + "/" + str(self.batch_counter) + "/paths"
-                
+                #os.mkdir(self.path_logger_file + "/" + str(self.batch_counter))
+                #self.path_logger_file_ = self.path_logger_file + "/" + str(self.batch_counter) + "/paths"
+
                 current_mrr = self.test(beam=True, print_paths=False)
             
             # Check early stopping
@@ -483,7 +492,7 @@ class Trainer(object):
             gc.collect()
         
         # Close summary writer AFTER the loop ends
-        self.summary_writer.close()
+        #self.summary_writer.close()
     
     
     def test(self, beam = True, print_paths = True, save_model = True, mrr = True):
@@ -709,7 +718,7 @@ class Trainer(object):
                     AP += 1.0/((answer_pos+1))
 
                 if print_paths:
-                    qr = self.train_environment.grapher.rev_relation_vocab[self.qr[b * self.test_rollouts]]
+                    qr = self.rev_relation_vocab[self.qr[b * self.test_rollouts]] #FIX TEST
                     start_e = self.rev_entity_vocab[episode.start_entities[b * self.test_rollouts]]
                     end_e = self.rev_entity_vocab[episode.end_entities[b * self.test_rollouts]]
                     paths[str(qr)].append(str(start_e) + "\t" + str(end_e) + "\n")
@@ -971,31 +980,30 @@ if __name__ == '__main__':
     save_path = ''
 
     # Code to allow for loading of existing model, uncomment this and comment the next two code blocks titled #TRAINING and #TESTING
-    #trainer = Trainer(options, tensorboard_dir=options['tensorboard_dir'])
-    #if not options['load_model']:
-        #TRAINING
-        #trainer = Trainer(options, tensorboard_dir=options['tensorboard_dir'])
-        #trainer.train()
-        #save_path = trainer.save_path
-        #path_logger_file = trainer.path_logger_file
-        #output_dir = trainer.output_dir
-
-    #else:
-        #logger.info("Skipping training")
-        #logger.info("Loading model from {}".format(options["model_load_dir"]))
-        #save_path = options["model_load_dir"]
-        #path_logger_file = trainer.path_logger_file
-        #output_dir = trainer.output_dir
-    
-    #TRAINING
     trainer = Trainer(options)
-    trainer.train()
-    save_path = trainer.save_path
-    path_logger_file = trainer.path_logger_file
-    output_dir = trainer.output_dir
+    if not options['load_model']:
+        #TRAINING
+        trainer.train()
+        save_path = trainer.save_path
+        path_logger_file = trainer.path_logger_file
+        output_dir = trainer.output_dir
+
+    else:
+        logger.info("Skipping training")
+        logger.info("Loading model from {}".format(options["model_load_dir"]))
+        save_path = options["model_load_dir"]
+        path_logger_file = trainer.path_logger_file
+        output_dir = trainer.output_dir
     
-    #TESTING
-    trainer.test_rollouts = 100
+    # #TRAINING
+    # trainer = Trainer(options)
+    # trainer.train()
+    # save_path = trainer.save_path
+    # path_logger_file = trainer.path_logger_file
+    # output_dir = trainer.output_dir
+
+    # #TESTING
+    # trainer.test_rollouts = 100
 
     os.mkdir(path_logger_file + "/" + "test_beam")
     trainer.path_logger_file_ = path_logger_file + "/" + "test_beam" + "/paths"
@@ -1016,12 +1024,23 @@ if __name__ == '__main__':
                 meta = json.load(f)
             best_step = int(meta.get("best_step", 0))
             model = meta.get("model_path")
+            ## FIX TEST - resolve relative model path to absolute
+            if model and not os.path.isabs(model):
+                model = os.path.join(os.getcwd(), model)
+            ## END FIX TEST
             th = float(meta.get("threshold", threshold_for_step(best_step)))
             logger.info(f"[TEST] Using best_step={best_step} → threshold={th:.2f} (from {sidecar})")
         except Exception as e:
             logger.warning(f"[TEST] Failed to read {sidecar}: {e}; defaulting step=0, threshold={threshold_for_step(0):.2f}")
     else:
         logger.warning(f"[TEST] {sidecar} not found; defaulting step=0, threshold={threshold_for_step(0):.2f}")
+
+    ## FIX TEST - fallback if model_path not found
+    if not model or not os.path.exists(model):
+        fallback = os.path.join(ckpt_dir, "model.ckpt")
+        logger.warning(f"[TEST] model_path not found ({model}), trying fallback: {fallback}")
+        model = fallback
+    ## END FIX TEST
 
     # Load best model weights and parameters
     trainer.agent.load_state_dict(torch.load(model, map_location=trainer.device))

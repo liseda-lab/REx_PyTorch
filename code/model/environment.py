@@ -644,7 +644,7 @@ class Episode(object):
         #if (not self.agentic_ai_enabled) or (_agentic_client is None) or (not self.persona_text):
         if (not self.agentic_ai_enabled) or (_call_llm is None) or (not self.persona_text):
             # keep logging arrays coherent so the rest of the pipeline/test logger works
-            print("[INFO] Agentic AI disabled or client/persona missing; using IC-based rewards only.")
+            #print("[INFO] Agentic AI disabled or client/persona missing; using IC-based rewards only.")
             #print(self.agentic_ai_enabled, _call_llm is None, not self.persona_text)
             self.agentic_scores = base.astype(np.float32)
             self.llm_dimensions = {}

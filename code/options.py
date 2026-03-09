@@ -46,7 +46,7 @@ def read_options():
     parser.add_argument('--sigmoid', default=0, type=int)
     parser.add_argument('--seed', default=None, type=int)
     parser.add_argument('--size_flexibility', default=1, type=int)
-    parser.add_argument('--tensorboard_dir', default="tensorboard", type=str)
+    #parser.add_argument('--tensorboard_dir', default="tensorboard", type=str)
     parser.add_argument("--prevent_cycles", default=0, type=int)
     parser.add_argument("--agentic_ai_enabled", default=0, type=int,
                         help="Enable Agentic AI persona-shaped scoring (1 = on, 0 = off)")

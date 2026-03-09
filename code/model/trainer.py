@@ -603,6 +603,13 @@ class Trainer(object):
                     episode.done_mask        = episode.done_mask[y]
                     episode.current_entities = episode.current_entities[y]
 
+                    ## FIX IC MEAN
+                    for j in range(len(episode.weight_history)):
+                        episode.weight_history[j] = episode.weight_history[j][y]
+                    for j in range(len(episode.relation_history)):
+                        episode.relation_history[j] = episode.relation_history[j][y]
+                    ## END FIX IC MEAN
+
                     y += np.repeat([b*k for b in range(temp_batch_size)], k)
                     state['current_entities'] = state['current_entities'][y]
                     state['next_relations'] = state['next_relations'][y,:]

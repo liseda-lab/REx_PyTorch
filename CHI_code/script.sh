@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=rextorch
-#SBATCH --output=rextorch.out
-#SBATCH --partition=tier2
-#SBATCH --gres=gpu:1
-#SBATCH --nodelist=liseda-01
+#SBATCH --output=rextorchQwen359B.out
+#SBATCH --partition=gpu_un
+#SBATCH --nodelist=liseda-05
+#SBATCH --gres=gpu:rtx5090:1
 
 uv run bash run.sh configs/hetionet_dr.sh

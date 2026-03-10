@@ -56,6 +56,8 @@ def read_options():
                         help="Use LLM via API instead of local (1 = api, 0 = local)")
     parser.add_argument("--llm_model", default="qwen", type=str,
                         help="Which model to use when llm_api=1 (gpt or qwen)")
+    parser.add_argument("--local_model", default="Qwen/Qwen3.5-9B", type=str,
+                        help="HuggingFace model name for local LLM (e.g. Qwen/Qwen3-4B for lightweight testing)")
 
     
     try:

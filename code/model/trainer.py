@@ -6,6 +6,7 @@ import json
 import time
 import os
 import logging
+import pickle
 import numpy as np
 import torch
 import torch.nn as nn
@@ -15,6 +16,7 @@ from code.options import read_options
 from code.model.environment import env
 import codecs
 from collections import defaultdict
+from itertools import combinations
 import gc
 import resource
 import sys
@@ -143,6 +145,53 @@ class Trainer(object):
 
         #self.summary_writer = SummaryWriter(log_dir=self.tensorboard_dir)
 
+        ## NEW: load node labels/types for JSON output (from graph_labels.tsv)
+        self._node_labels = {}   # entity_id -> human-readable label
+        self._node_types  = {}   # entity_id -> type string (e.g. "Compound")
+        try:
+            gl_path = os.path.join(self.data_input_dir, 'graph_labels.tsv')
+            with open(gl_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    parts = line.strip().split('\t')
+                    if len(parts) >= 3:
+                        self._node_labels[parts[0]] = parts[1]
+                        self._node_types[parts[0]]  = parts[2]
+                    elif len(parts) >= 2:
+                        self._node_labels[parts[0]] = parts[1]
+            logger.info(f"[JSON] Loaded {len(self._node_labels)} node labels from {gl_path}")
+        except Exception as e:
+            logger.warning(f"[JSON] Could not load graph_labels.tsv: {e}")
+
+        ## NEW: try to load ontology DAGs for LCA computation
+        self._lca_ready = False
+        try:
+            import networkx as _nx
+            from rdflib import URIRef as _URIRef
+            onto_dir = "ontologies"
+            ncit_path  = os.path.join(onto_dir, "NCIT_HETIONET_DAG.pkl")
+            chebi_path = os.path.join(onto_dir, "CHEBI_HETIONET_DAG.pkl")
+            onto_labels_path = os.path.join(onto_dir, "onto_labels.json")
+
+            if all(os.path.exists(p) for p in [ncit_path, chebi_path, onto_labels_path]):
+                with open(ncit_path, 'rb') as f:
+                    self._dag_ncit = pickle.load(f)
+                with open(chebi_path, 'rb') as f:
+                    self._dag_chebi = pickle.load(f)
+                with open(onto_labels_path, 'r', encoding='utf-8') as f:
+                    self._onto_labels = json.load(f)
+                self._too_general = {
+                    'http://ncicb.nci.nih.gov/xml/owl/EVS/Thesaurus.owl#C7057',
+                    'http://ncicb.nci.nih.gov/xml/owl/EVS/Thesaurus.owl#C1909',
+                    'http://ncicb.nci.nih.gov/xml/owl/EVS/Thesaurus.owl#C1908',
+                }
+                self._lca_ready = True
+                logger.info("[LCA] Ontology DAGs loaded successfully")
+            else:
+                logger.info("[LCA] Ontology files not found, LCA disabled")
+        except Exception as e:
+            logger.warning(f"[LCA] Could not initialize: {e}")
+        ## END NEW
+
     def set_random_seed(self, seed):
         """
         Set random seeds for reproducibility.
@@ -157,26 +206,76 @@ class Trainer(object):
             logger.info(f"Random seeds set to {seed}")
 
 
+    def _compute_lcas_for_path(self, entity_ids):
+        """
+        Compute lowest common ancestors for all node pairs in a path.
+        Returns dict {"label1,label2": ["ancestor1", ...]} or None.
+        """
+        if not self._lca_ready:
+            return None
+        try:
+            import networkx as nx
+            from rdflib import URIRef
+
+            nodes = [URIRef(f"http://onto/{eid}") for eid in entity_ids]
+            lcas = defaultdict(set)
+
+            for dag, dag_nodes in [
+                (self._dag_ncit,  [n for n in nodes if n in self._dag_ncit]),
+                (self._dag_chebi, [n for n in nodes if n in self._dag_chebi]),
+            ]:
+                pairs = list(combinations(dag_nodes, 2))
+                if not pairs:
+                    continue
+                raw = dict(nx.all_pairs_lowest_common_ancestor(dag, pairs))
+                for pair, anc in raw.items():
+                    if anc and str(anc) not in self._too_general:
+                        lcas[pair].add(anc)
+
+            if not lcas:
+                return None
+
+            # Convert to labeled format: "label1,label2" -> [ancestor_labels]
+            result = {}
+            for (n1, n2), anc_set in lcas.items():
+                eid1 = str(n1).replace("http://onto/", "")
+                eid2 = str(n2).replace("http://onto/", "")
+                lbl1 = self._node_labels.get(eid1, eid1)
+                lbl2 = self._node_labels.get(eid2, eid2)
+                key = f"{lbl1},{lbl2}"
+                result[key] = [
+                    self._onto_labels.get(str(anc), str(anc))
+                    for anc in anc_set
+                ]
+            return result
+        except Exception as e:
+            logger.warning(f"[LCA] Error computing LCAs: {e}")
+            return None
+
     def _keep_correct_entry(self, groups, episode, b, r, p, rewards):
         """
-        If rollout (b,r) is correct, append a compact dict into groups[start][end].
-        Stores only path-level IC (mean), no per-step IC.
+        If rollout (b,r) is correct, build a path entry in the new JSON format
+        and append to groups[pair_id].
+        Format matches teste_output.json: nodes[], edges[], score{}, LCA.
         """
         indx = b * self.test_rollouts + r
         if rewards[indx] <= 0:
             return  # keep only correct paths
 
-        start_name = self.rev_entity_vocab[episode.start_entities[b * self.test_rollouts]]
-        end_name   = self.rev_entity_vocab[episode.end_entities[b * self.test_rollouts]]
+        # Pair ID in format "Type::ID - Type::ID"
+        start_id = self.rev_entity_vocab[episode.start_entities[b * self.test_rollouts]]
+        end_id   = self.rev_entity_vocab[episode.end_entities[b * self.test_rollouts]]
+        pair_id  = f"{start_id} - {end_id}"
 
-        ## FIX IC MEAN - recompute ic_mean from the final path (entity_trajectory)
-        ## instead of using potentially misaligned weight_history
-        ent_names = [self.rev_entity_vocab[e] for e in p['entities']]
-        rel_names = [self.rev_relation_vocab[rr] for rr in p['relations']]
+        # Entity and relation IDs from the path
+        ent_ids = [self.rev_entity_vocab[e] for e in p['entities']]
+        rel_ids = [self.rev_relation_vocab[rr] for rr in p['relations']]
+
+        ## Recompute ic_mean from the final path
         edges_weight = episode.grapher.edges_weight
         ic_weights = []
-        for i, rel in enumerate(rel_names):
-            e1, e2 = ent_names[i], ent_names[i + 1]
+        for i, rel in enumerate(rel_ids):
+            e1, e2 = ent_ids[i], ent_ids[i + 1]
             if rel in edges_weight:
                 w_e1 = edges_weight[rel].get(e1, 0.5)
                 w_e2 = edges_weight[rel].get(e2, 0.5)
@@ -184,34 +283,49 @@ class Trainer(object):
             else:
                 ic_weights.append(0.5)
         ic_mean = sum(ic_weights) / len(ic_weights) if ic_weights else 0.0
-        ## END FIX IC MEAN
 
-        # final_score = the actual reward used (blend for LLM paths, IC for others)
+        # Scores
         final_score = float(episode.agentic_scores[indx]) if episode.agentic_scores is not None else 0.0
-        reward_kind = episode.reward_kind[indx] if hasattr(episode, "reward_kind") else "n/a"
 
-        entry = {
-            "beam_logprob": float(self.log_probs[b, r]),
-            "final_score": final_score,
-            "reward_kind": reward_kind,
-            "ic_mean": ic_mean,
-            "path": {
-                "entities":  ent_names,
-                "relations": rel_names,
-            },
+        score = {
+            "ic_mean": round(ic_mean, 4),
+            "final_score": round(final_score, 4),
         }
 
-        # For LLM-scored paths, add the raw LLM score and dimensions
+        # Add agentic_score (LLM blend) if this path was LLM-scored
         if indx in episode.llm_dimensions:
             dims = episode.llm_dimensions[indx]
-            entry["llm_score"] = float(dims.get("llm_score", 0.0))
-            entry["llm_dimensions"] = {
-                "validity": float(dims["validity"]),
-                "completeness_conv": float(dims["completeness_conv"]),
-                "relevance": float(dims["relevance"]),
-            }
+            score["agentic_score"] = round(float(dims.get("llm_score", 0.0)), 4)
 
-        groups.setdefault(start_name, {}).setdefault(end_name, []).append(entry)
+        # Nodes with human-readable label and type
+        nodes = []
+        for eid in ent_ids:
+            nodes.append({
+                "id": self._node_labels.get(eid, eid),
+                "type": self._node_types.get(eid, eid.split("::")[0] if "::" in eid else "Unknown"),
+            })
+
+        # Edges with source/target labels and relation label
+        edges = []
+        for i, rel in enumerate(rel_ids):
+            edges.append({
+                "source": self._node_labels.get(ent_ids[i], ent_ids[i]),
+                "target": self._node_labels.get(ent_ids[i + 1], ent_ids[i + 1]),
+                "label": rel,
+            })
+
+        entry = {
+            "score": score,
+            "nodes": nodes,
+            "edges": edges,
+        }
+
+        # Lowest common ancestors (if ontology DAGs are available)
+        lcas = self._compute_lcas_for_path(ent_ids)
+        if lcas:
+            entry["lowest_common_ancestors"] = lcas
+
+        groups.setdefault(pair_id, []).append(entry)
 
     def calc_reinforce_loss(self, per_example_loss, per_example_logits, cum_discounted_reward):
         """
@@ -677,7 +791,7 @@ class Trainer(object):
                     state['current_entities'])
 
             # Process final rewards from environment
-           # rewards = episode.get_reward_weights_sigmoid()  
+           # rewards = episode.get_reward_ic_based()  
             rewards = episode.get_reward_agenticAI() # -- NEW 
             #print(rewards)
             reward_reshape = rewards.reshape((temp_batch_size, self.test_rollouts))
@@ -915,16 +1029,26 @@ class Trainer(object):
         self.write_results_to_file(final_rewards)
         self.log_results(final_rewards)
 
-        # Sort by agentic score (desc) and write JSON
-        # Grouped JSON output: sort each [start][end] list by final_score desc
+        # Build output JSON in new pairs/paths format (matches teste_output.json)
         if correct_groups:
-            for s, ends in correct_groups.items():
-                for e, lst in ends.items():
-                    lst.sort(key=lambda x: x["final_score"], reverse=True)
+            pairs_list = []
+            path_counter = 1
+            for pair_id, path_entries in correct_groups.items():
+                # Sort by final_score descending
+                path_entries.sort(key=lambda x: x["score"]["final_score"], reverse=True)
+                # Assign sequential path IDs
+                for entry in path_entries:
+                    entry["id"] = f"path_{path_counter}"
+                    path_counter += 1
+                pairs_list.append({
+                    "id": pair_id,
+                    "paths": path_entries,
+                })
 
-            json_path = self.path_logger_file_ + "_correct_grouped.json"
+            output = {"pairs": pairs_list}
+            json_path = self.path_logger_file_ + "_final_paths.json"
             with open(json_path, "w", encoding="utf-8") as f:
-                json.dump(correct_groups, f, ensure_ascii=False, indent=2)
+                json.dump(output, f, ensure_ascii=False, indent=2)
             logger.info(f"[SAVED] Correct grouped JSON → {json_path}")
 
 

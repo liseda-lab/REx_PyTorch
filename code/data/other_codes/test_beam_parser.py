@@ -115,27 +115,16 @@ class TestBeamParser:
         return 0.0, "none", sub_scores
     
     def _create_score_object(self, score_value: float, method: str, sub_scores: Dict[str, float]) -> Dict[str, Any]:
-        """Create score object based on method type and available sub-scores."""
-        if method == "llm" and sub_scores:
-            score_obj = {
-                "scientific_validity": sub_scores.get('validity'),
-                "completeness": sub_scores.get('completeness'),
-                "relevance": sub_scores.get('relevance'),
-                "final_score": score_value if score_value is not None else 0.0
-            }
-        else:
-            # For non-llm or llm without sub-scores
-            score_obj = {
-                "scientific_validity": None,
-                "completeness": None,
-                "relevance": None,
-                "final_score": score_value if score_value is not None else 0.0
-            }
-        
-        # Add ic_avg if it exists in sub_scores (for both llm and non-llm)
-        if 'ic_avg' in sub_scores:
-            score_obj['ic_avg'] = sub_scores['ic_avg']
-        
+        """Create score object with ic_mean, agentic_score (if LLM), and final_score."""
+        score_obj = {
+            "ic_mean": sub_scores.get('ic_avg'),
+            "final_score": score_value if score_value is not None else 0.0,
+        }
+
+        # Add agentic_score only for LLM-scored paths
+        if method == "llm" and score_value is not None:
+            score_obj["agentic_score"] = score_value
+
         return score_obj
     def _parse_block(self, block: str) -> Optional[Tuple[Optional[str], Optional[Dict]]]:
         """

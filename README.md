@@ -1,6 +1,6 @@
 # REx_PyTorch
 
-This is the pytorch implementation for the REx [paper](https://www.ijcai.org/proceedings/2025/0515.pdf). The original implementation of REx can be found [here](https://github.com/liseda-lab/REx). This REx implementation already includes a new approach called Adaptive REx, but to use the original REX, just choose the `neutral_evaluator` file inside configs. More details will be here soon.
+This is the pytorch implementation for the REx [paper](https://www.ijcai.org/proceedings/2025/0515.pdf). The original implementation of REx in tensorflow can be found [here](https://github.com/liseda-lab/REx). This REx implementation already includes a new approach called Adaptive REx, but to use the original REX, just choose the `neutral_evaluator` files inside configs. More details will be here soon.
 
 ## Guide to run the system
 
@@ -59,13 +59,28 @@ Where:
 cat graph_part*.txt > graph.txt
 ```
 
-**Note2**: Current uses a local version of the Qwen3.5 9B large language model via the HF Transformers library for the adaptive version of REx. Testing was done using an RTX 5090 GPU. GPUs with less VRAM will not be able to load both the LLM and the REx system onto GPU. If using an API for LLM calls, execution can be achieved on any system, even without a GPU.  
+**Note2**: The adaptive version of REx uses a large language model for persona-shaped scoring. There are three modes controlled by `--llm_api` and `--llm_model`:
+
+| Mode | Flag | Model | Requirement |
+|------|------|-------|-------------|
+| Local (default) | `--llm_api 0` | Set by `--local_model` | GPU recommended |
+| Qwen API | `--llm_api 1 --llm_model qwen` | Qwen via HuggingFace | HF API key in `.env` |
+| GPT API | `--llm_api 1 --llm_model gpt` | GPT via OpenAI | OpenAI key in `.env` |
+
+For local mode, the `--local_model` parameter controls which model is loaded (default: `Qwen/Qwen3.5-9B`). On the **first run**, the model weights are automatically downloaded from HuggingFace and cached in `~/.cache/huggingface/hub/`. This is a one-time download but can take several minutes depending on model size and connection speed:
+
+| Model | Download Size | RAM/VRAM | Recommended for |
+|-------|--------------|----------|-----------------|
+| `Qwen/Qwen3-1.7B` | ~3.4 GB | ~5 GB | Quick testing on CPU |
+| `Qwen/Qwen3-4B` | ~8 GB | ~10 GB | Testing on Mac / light GPU |
+| `Qwen/Qwen3.5-9B` | ~18 GB | ~20 GB | Training (needs GPU) |
+
+No account or token is needed — the models are open source and download freely. Training was done using an RTX 5090 GPU. For API-based LLM calls, execution can be achieved on any system, even without a GPU.
 
 ### Authors
 - __Diogo Venes__
 - __Susana Nunes__
 - __Catia Pesquita__
-
 
 
 For any comments or help needed, please send an email to: scnunes@ciencias.ulisboa.pt

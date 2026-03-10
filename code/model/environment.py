@@ -50,20 +50,28 @@ try:
     _llm_model = None
     _llm_tokenizer = None
     _llm_device = None
+    _local_model_name = "Qwen/Qwen3.5-9B"  # default, overridden by --local_model
 
     def _init_llm():
         global _llm_model, _llm_tokenizer, _llm_device
         if _llm_model is not None:
             return
         from transformers import AutoModelForCausalLM, AutoTokenizer
-        MODEL_NAME = "Qwen/Qwen3.5-9B"
+        MODEL_NAME = _local_model_name
+        hf_token = os.getenv("HF_API_KEY") or os.getenv("HF_TOKEN")
         print(f"[LLM] Loading {MODEL_NAME}...")
-        _llm_device = "cuda" if torch.cuda.is_available() else "cpu"
-        _llm_tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+        if torch.cuda.is_available():
+            _llm_device = "cuda"
+        elif torch.backends.mps.is_available():
+            _llm_device = "mps"
+        else:
+            _llm_device = "cpu"
+        _llm_tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, token=hf_token)
         _llm_model = AutoModelForCausalLM.from_pretrained(
             MODEL_NAME,
-            dtype=torch.bfloat16,
-            device_map="auto"
+            dtype=torch.bfloat16 if _llm_device != "cpu" else torch.float32,
+            device_map="auto",
+            token=hf_token,
         )
         print(f"[LLM] Ready on {_llm_device}")
 
@@ -74,7 +82,8 @@ try:
                 messages, tokenize=False,
                 add_generation_prompt=True, enable_thinking=False
             )
-            inputs = _llm_tokenizer(prompt, return_tensors="pt").to(_llm_device)
+            model_device = next(_llm_model.parameters()).device
+            inputs = _llm_tokenizer(prompt, return_tensors="pt").to(model_device)
             with torch.no_grad():
                 outputs = _llm_model.generate(
                     **inputs, max_new_tokens=3072,
@@ -240,9 +249,10 @@ class Episode(object):
 
     def __init__(self, graph, data, params):
         self.grapher = graph
-        self.batch_size, self.path_len, num_rollouts, test_rollouts, positive_reward, negative_reward, mode, batcher, weighted_reward, adjust_factor, sigmoid, size_flexibility, prevent_cycles, persona_path, agentic_ai_enabled, llm_api, llm_model  = params  # NEW - ADITION OF PERSONA PATH
+        self.batch_size, self.path_len, num_rollouts, test_rollouts, positive_reward, negative_reward, mode, batcher, weighted_reward, adjust_factor, sigmoid, size_flexibility, prevent_cycles, persona_path, agentic_ai_enabled, llm_api, llm_model, local_model  = params  # NEW - ADITION OF PERSONA PATH
         ## FIX TEST - set LLM caller based on --llm_api / --llm_model
-        global _call_llm
+        global _call_llm, _local_model_name
+        _local_model_name = local_model  # set before _init_llm() is called
         if llm_api:
             if llm_model == 'gpt':
                 _call_llm = _call_llm_gpt_api
@@ -317,15 +327,6 @@ class Episode(object):
 
     def get_query_relation(self):
         return self.query_relation
-
-    def get_reward(self):
-        reward = (self.current_entities == self.end_entities)
-
-        # set the True and False values to the values of positive and negative rewards.
-        condlist = [reward == True, reward == False]
-        choicelist = [self.positive_reward, self.negative_reward]
-        reward = np.select(condlist, choicelist)  # [B,]
-        return reward
 
 
     def _cache_ic_summaries(self):
@@ -766,7 +767,7 @@ class Episode(object):
                     if missing or len(by_id) != len(id_list):
                         print(f"[WARN] ID-mismatch: expected {len(id_list)}, got {len(by_id)}, "
                             f"filled defaults for {missing} ids")
-                       # print(f"[DEBUG] Prompt was:\n{prompt}\n")
+                        print(f"[DEBUG] Prompt was:\n{prompt}\n")
                         print(f"[DEBUG] Raw response was:\n{raw}\n")
                     return out
                     
@@ -800,7 +801,7 @@ class Episode(object):
     def get_reward_agenticAI(self, wV=1/3, wC=1/3, wR=1/3):
         training_step = getattr(Episode, '_training_step', 0)
         
-        base = self.get_reward_weights_sigmoid()
+        base = self.get_reward_ic_based()
         self._cache_ic_summaries()
         B = base.shape[0]
 
@@ -942,7 +943,7 @@ class Episode(object):
 
 
 
-    def get_reward_weights_sigmoid(self):
+    def get_reward_ic_based(self):
         """
         CALCULATE REWARD BASED ON THE POSITIVE REWARD AND THE AVERAGE WEIGHT (IC).
         USE '2.0' AS A SENTINEL FOR PADDING AND IGNORE IT IN THE MEAN.
@@ -971,38 +972,6 @@ class Episode(object):
         choicelist = [positive_part, self.negative_reward]
         final_reward = np.select(condlist, choicelist)
         return final_reward
-
-
-    def get_reward_weights(self):
-        """
-        Calculate reward based on the positive reward and the weights of the edges.
-         - If the current entities match the end entities, reward is calculated as:
-        average of edge weights multiplied by the positive reward.
-        - Otherwise, the negative reward is applied.
-        """
-        reward = (self.current_entities == self.end_entities)
-
-        #calculate the average of the edge weights
-        average_ic = np.mean(self.weight_history, axis=0) 
-
-        if self.weighted_reward:
-            #simple multiplication of the positive reward with the average of the edge weights
-            positive_reward = self.positive_reward * average_ic
-
-        else:
-            positive_reward = self.positive_reward
-
-        
-        # set the True and False values to the values of positive and negative rewards.
-        condlist = [reward == True, reward == False]
-        choicelist = [positive_reward, self.negative_reward]
-        reward = np.select(condlist, choicelist)  
-
-        # print if positive reward is given 
-        if np.any(reward == self.positive_reward):
-            print("Positive reward was given")
-
-        return reward
 
 
     def __call__(self, action):
@@ -1106,6 +1075,7 @@ class env(object):
         self.agentic_ai_enabled = params['agentic_ai_enabled'] # NEW
         self.llm_api = params.get('llm_api', False)
         self.llm_model = params.get('llm_model', 'qwen')
+        self.local_model = params.get('local_model', 'Qwen/Qwen3.5-9B')
         self.weighted_reward = params['weighted_reward']
         self.adjust_factor = params['IC_importance']
         self.sigmoid = params['sigmoid']
@@ -1148,7 +1118,7 @@ class env(object):
                                              )
 
     def get_episodes(self):
-        params = self.batch_size, self.path_len, self.num_rollouts, self.test_rollouts, self.positive_reward, self.negative_reward, self.mode, self.batcher, self.weighted_reward, self.adjust_factor, self.sigmoid, self.size_flexibility, self.prevent_cycles, self.persona_path, self.agentic_ai_enabled, self.llm_api, self.llm_model #NEW ADDITION OF PERSONA
+        params = self.batch_size, self.path_len, self.num_rollouts, self.test_rollouts, self.positive_reward, self.negative_reward, self.mode, self.batcher, self.weighted_reward, self.adjust_factor, self.sigmoid, self.size_flexibility, self.prevent_cycles, self.persona_path, self.agentic_ai_enabled, self.llm_api, self.llm_model, self.local_model #NEW ADDITION OF PERSONA
         if self.mode == 'train':
             for data in self.batcher.yield_next_batch_train():
                 yield Episode(self.grapher, data, params)

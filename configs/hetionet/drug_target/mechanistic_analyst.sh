@@ -27,3 +27,4 @@ agentic_ai_enabled=1
 persona_path="personas/mechanistic_analyst.txt"
 llm_api=0
 llm_model=qwen
+local_model="Qwen/Qwen3.5-9B"

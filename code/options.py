@@ -58,6 +58,8 @@ def read_options():
                         help="Which model to use when llm_api=1 (gpt or qwen)")
     parser.add_argument("--local_model", default="Qwen/Qwen3.5-9B", type=str,
                         help="HuggingFace model name for local LLM (e.g. Qwen/Qwen3-4B for lightweight testing)")
+    parser.add_argument("--viz_mode", default=0, type=int,
+                        help="UI visualization mode: only produce the JSON output (1 = on, 0 = off)")
 
     
     try:
@@ -77,6 +79,7 @@ def read_options():
     parsed['prevent_cycles'] = (parsed['prevent_cycles'] == 1)
     parsed['agentic_ai_enabled'] = (parsed['agentic_ai_enabled'] == 1) # NEW
     parsed['llm_api'] = (parsed['llm_api'] == 1)
+    parsed['viz_mode'] = (parsed['viz_mode'] == 1)
 
 
 
@@ -96,10 +99,12 @@ def read_options():
     ##Logger##
     parsed['path_logger_file'] = parsed['output_dir']
     parsed['log_file_name'] = parsed['output_dir'] +'/log.txt'
-    os.makedirs(parsed['output_dir'])
-    os.mkdir(parsed['model_dir'])
-    with open(parsed['output_dir']+'/config.txt', 'w') as out:
-        pprint(parsed, stream=out)
+    os.makedirs(parsed['output_dir'], exist_ok=True)
+    if not parsed['viz_mode']:
+        os.mkdir(parsed['model_dir'])
+    if not parsed['viz_mode']:
+        with open(parsed['output_dir']+'/config.txt', 'w') as out:
+            pprint(parsed, stream=out)
 
     # print and return
     maxLen = max([len(ii) for ii in parsed.keys()])

@@ -20,7 +20,8 @@ cmd="python code/model/trainer.py --base_output_dir $base_output_dir \
     --persona_path $persona_path \
     --llm_api ${llm_api:-0} \
     --llm_model ${llm_model:-qwen} \
-    --local_model ${local_model:-Qwen/Qwen3.5-9B}"
+    --local_model ${local_model:-Qwen/Qwen3.5-9B} \
+    --viz_mode ${viz_mode:-0}"
 
 echo "Executing $cmd"
 

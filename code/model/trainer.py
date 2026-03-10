@@ -88,9 +88,10 @@ def configure_logger(log_file_path):
     console_handler.setFormatter(logging.Formatter(fmt=fmt, datefmt=datefmt))
     logger.addHandler(console_handler)
 
-    file_handler = logging.FileHandler(log_file_path, 'w')  
-    file_handler.setFormatter(logging.Formatter(fmt=fmt, datefmt=datefmt))
-    logger.addHandler(file_handler)
+    if log_file_path:
+        file_handler = logging.FileHandler(log_file_path, 'w')
+        file_handler.setFormatter(logging.Formatter(fmt=fmt, datefmt=datefmt))
+        logger.addHandler(file_handler)
 
     return logger
 
@@ -1039,20 +1040,21 @@ class Trainer(object):
                     if self.current_waiting_period == 0:
                         self.early_stopping = True
                         logger.info(f"[EARLY STOP] Best MRR was {self.best_metric:.4f}")
-        # Log paths and answers
-        if print_paths:
-            logger.info("[ printing paths at {} ]".format(self.output_dir+'/test_beam/'))
-            for q in paths:
-                j = q.replace('/', '-')
-                with codecs.open(self.path_logger_file_ + '_' + j, 'a', 'utf-8') as pos_file:
-                    for p in paths[q]:
-                        pos_file.write(p)
-            with open(self.path_logger_file_ + 'answers', 'w') as answer_file:
-                for a in answers:
-                    answer_file.write(a)
+        # Log paths and answers (skip in viz_mode — only JSON needed)
+        if not getattr(self, 'viz_mode', False):
+            if print_paths:
+                #logger.info("[ printing paths at {} ]".format(self.output_dir+'/test_beam/'))
+                for q in paths:
+                    j = q.replace('/', '-')
+                    with codecs.open(self.path_logger_file_ + '_' + j, 'a', 'utf-8') as pos_file:
+                        for p in paths[q]:
+                            pos_file.write(p)
+                with open(self.path_logger_file_ + 'answers', 'w') as answer_file:
+                    for a in answers:
+                        answer_file.write(a)
 
-        self.write_results_to_file(final_rewards)
-        self.log_results(final_rewards)
+            self.write_results_to_file(final_rewards)
+            self.log_results(final_rewards)
 
         # Build output JSON in new pairs/paths format (matches teste_output.json)
         # Use unique ordered pairs (preserve test order, deduplicate)
@@ -1143,13 +1145,14 @@ if __name__ == '__main__':
 
     options = read_options()
     # Default env log file if not provided via CLI/opts
-    options.setdefault(
-        'env_log_file',
-        os.path.join(options['output_dir'], 'env_metrics.log')
-    )
+    if not options['viz_mode']:
+        options.setdefault(
+            'env_log_file',
+            os.path.join(options['output_dir'], 'env_metrics.log')
+        )
 
     # Configure the logger
-    logger = configure_logger(options['log_file_name'])
+    logger = configure_logger(options['log_file_name'] if not options['viz_mode'] else None)
 
     # read the vocab files
     logger.info('reading vocab files...')
@@ -1191,10 +1194,13 @@ if __name__ == '__main__':
     # #TESTING
     # trainer.test_rollouts = 100
 
-    os.mkdir(path_logger_file + "/" + "test_beam")
-    trainer.path_logger_file_ = path_logger_file + "/" + "test_beam" + "/paths"
-    with open(output_dir + '/scores.txt', 'a') as score_file:
-        score_file.write("Test (beam) scores with best model from " + save_path + "\n")
+    if options['viz_mode']:
+        trainer.path_logger_file_ = path_logger_file + "/paths"
+    else:
+        os.mkdir(path_logger_file + "/" + "test_beam")
+        trainer.path_logger_file_ = path_logger_file + "/" + "test_beam" + "/paths"
+        with open(output_dir + '/scores.txt', 'a') as score_file:
+            score_file.write("Test (beam) scores with best model from " + save_path + "\n")
     trainer.test_environment = trainer.test_test_environment
     trainer.test_environment.test_rollouts = 100
 

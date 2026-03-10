@@ -1,48 +1,48 @@
 Gr>G	regulates
-_CbG	inverse_binds
+_CbG	is bound by
 GpCC	participates
 GiG	interacts
 PCiC	includes
-_CcSE	inverse_causes
+_CcSE	is caused by
 GpBP	participates
 AuG	upregulates
 CpD	palliates
 DrD	resembles
-_DuG	inverse_upregulates
+_DuG	is upregulated by
 DuG	upregulates
-_PCiC	inverse_includes
+_PCiC	is included in
 DpS	presents
 AdG	downregulates
 AeG	expresses
-_AuG	inverse_upregulates
-_DlA	inverse_localizes
-_DdG	inverse_downregulates
-_CdG	inverse_downregulates
+_AuG	is upregulated by
+_DlA	is localized by
+_DdG	is downregulated by
+_CdG	is downregulated by
 _DrD	resembles
 DlA	localizes
-_GiG	inverse_interacts
+_GiG	is interacted by
 GpMF	participates
 CcSE	causes
-_GpBP	inverse_participates
+_GpBP	is participated by
 CrC	resembles
 CuG	upregulates
 CtD	treats
-_Gr>G	inverse_regulates
-_CuG	inverse_upregulates
-_GpPW	inverse_participates
-_AeG	inverse_expresses
+_Gr>G	is regulated by
+_CuG	is upregulated by
+_GpPW	is participated by
+_AeG	is expressed by
 _CrC	resembles
 CdG	downregulates
 CbG	binds
 GcG	covaries
-_CpD	inverse_palliates
-_DpS	inverse_presents
-_DaG	inverse_associates
-_GpCC	inverse_participates
+_CpD	is palliated by
+_DpS	is presented by
+_DaG	is associated by
+_GpCC	is participated by
 DaG	associates
 DdG	downregulates
-_GcG	inverse_covaries
-_AdG	inverse_downregulates
-_CtD	inverse_treats
+_GcG	is covaried by
+_AdG	is downregulated by
+_CtD	is treated by
 GpPW	participates
-_GpMF	inverse_participates
+_GpMF	is participated by

@@ -1,5 +1,4 @@
 .env
-.env.*
 code/data/other_codes/input_files_lca/CHEBI_HETIONET_DAG.pkl
 code/data/other_codes/input_files_lca/onto_labels.json
 code/data/other_codes/input_files_lca/NCIT_HETIONET_DAG.pkl
@@ -12,4 +11,4 @@ code/__pycache__/
 code/model/__pycache__/agent.cpython-311.pyc
 code/model/__pycache__/environment.cpython-311.pyc
 code/__pycache__/options.cpython-311.pyc
-.env
+

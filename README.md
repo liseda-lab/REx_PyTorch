@@ -63,15 +63,18 @@ cat graph_part*.txt > graph.txt
 | Qwen API | `--llm_api 1 --llm_model qwen` | Qwen via HuggingFace | HF API key in `.env` |
 | GPT API | `--llm_api 1 --llm_model gpt` | GPT via OpenAI | OpenAI key in `.env` |
 
-For local mode, the `--local_model` parameter controls which model is loaded (default: `Qwen/Qwen3.5-9B`). On the **first run**, the model weights are automatically downloaded from HuggingFace and cached in `~/.cache/huggingface/hub/`. This is a one-time download but can take several minutes depending on model size and connection speed:
+For local mode, the `--local_model` parameter controls which model is loaded (default: `Qwen/Qwen3.5-9B`). The model weights are automatically downloaded from HuggingFace and cached in `~/.cache/huggingface/hub/`. It but can take several minutes depending on model size and connection speed:
 
 | Model | Download Size | RAM/VRAM | Recommended for |
 |-------|--------------|----------|-----------------|
 | `Qwen/Qwen3-1.7B` | ~3.4 GB | ~5 GB | Quick testing on CPU |
-| `Qwen/Qwen3-4B` | ~8 GB | ~10 GB | Testing on Mac / light GPU |
+| `Qwen/Qwen3-4B` | ~8 GB | ~10 GB | Testing light GPU |
 | `Qwen/Qwen3.5-9B` | ~18 GB | ~20 GB | Training (needs GPU) |
 
+The parameter viz_mode changes the default mode to `Qwen/Qwen3-4B` and only saves a final json with the generated explanations without any scores, metrics or logs.This is useful for testing few explanations at a time and for generating explanations on CPU (not advised for training). 
+
 No account or token is needed — the models are open source and download freely. Training was done using an RTX 5090 GPU. For API-based LLM calls, execution can be achieved on any system, even without a GPU.
+
 
 ### Authors
 - __Diogo Venes__

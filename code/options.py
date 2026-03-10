@@ -41,11 +41,10 @@ def read_options():
     parser.add_argument("--model_load_dir", default="", type=str)
     parser.add_argument("--load_model", default=0, type=int)
     parser.add_argument("--agent_IC_guiding", default=0, type=int)
-    parser.add_argument("--weighted_reward", default=1, type=int)
+    parser.add_argument("--IC_reward", default=1, type=int)
     parser.add_argument('--IC_importance', default=0, type=float)
-    parser.add_argument('--sigmoid', default=0, type=int)
     parser.add_argument('--seed', default=None, type=int)
-    parser.add_argument('--size_flexibility', default=1, type=int)
+    parser.add_argument('--early_stopping', default=1, type=int)
     #parser.add_argument('--tensorboard_dir', default="tensorboard", type=str)
     parser.add_argument("--prevent_cycles", default=0, type=int)
     parser.add_argument("--agentic_ai_enabled", default=0, type=int,
@@ -73,15 +72,17 @@ def read_options():
     parsed['train_relation_embeddings'] = (parsed['train_relation_embeddings'] == 1)
     
     parsed['agent_IC_guiding'] = (parsed['agent_IC_guiding'] == 1)
-    parsed['weighted_reward'] = (parsed['weighted_reward'] == 1)
-    parsed['sigmoid'] = (parsed['sigmoid'] == 1)
-    parsed['size_flexibility'] = (parsed['size_flexibility'] == 1)
+    parsed['IC_reward'] = (parsed['IC_reward'] == 1)
+    parsed['early_stopping'] = (parsed['early_stopping'] == 1)
     parsed['prevent_cycles'] = (parsed['prevent_cycles'] == 1)
     parsed['agentic_ai_enabled'] = (parsed['agentic_ai_enabled'] == 1) # NEW
     parsed['llm_api'] = (parsed['llm_api'] == 1)
     parsed['viz_mode'] = (parsed['viz_mode'] == 1)
 
-
+    # In viz_mode, force lightweight local LLM
+    if parsed['viz_mode']:
+        parsed['llm_api'] = False
+        parsed['local_model'] = "Qwen/Qwen3-4B"
 
     parsed['pretrained_embeddings_action'] = ""
     parsed['pretrained_embeddings_entity'] = ""

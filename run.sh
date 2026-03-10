@@ -14,13 +14,8 @@ cmd="python code/model/trainer.py --base_output_dir $base_output_dir \
     --max_num_actions $max_num_actions --data_input_dir $data_input_dir \
     --vocab_dir $vocab_dir --model_load_dir $model_load_dir \
     --load_model $load_model --total_iterations $total_iterations \
-    --weighted_reward $weighted_reward \
-    --size_flexibility $size_flexibility \
-    --agentic_ai_enabled $agentic_ai_enabled \
-    --persona_path $persona_path \
-    --llm_api ${llm_api:-0} \
-    --llm_model ${llm_model:-qwen} \
-    --local_model ${local_model:-Qwen/Qwen3.5-9B} \
+    --IC_reward ${IC_reward:-1} --early_stopping $early_stopping \
+    --agentic_ai_enabled $agentic_ai_enabled  --persona_path $persona_path \
     --viz_mode ${viz_mode:-0}"
 
 echo "Executing $cmd"

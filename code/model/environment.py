@@ -254,7 +254,7 @@ class Episode(object):
 
     def __init__(self, graph, data, params):
         self.grapher = graph
-        self.batch_size, self.path_len, num_rollouts, test_rollouts, positive_reward, negative_reward, mode, batcher, weighted_reward, adjust_factor, sigmoid, size_flexibility, prevent_cycles, persona_path, agentic_ai_enabled, llm_api, llm_model, local_model  = params  # NEW - ADITION OF PERSONA PATH
+        self.batch_size, self.path_len, num_rollouts, test_rollouts, positive_reward, negative_reward, mode, batcher, IC_reward, adjust_factor, early_stopping, prevent_cycles, persona_path, agentic_ai_enabled, llm_api, llm_model, local_model  = params
         ## FIX TEST - set LLM caller based on --llm_api / --llm_model
         global _call_llm, _local_model_name
         _local_model_name = local_model  # set before _init_llm() is called
@@ -277,9 +277,8 @@ class Episode(object):
         self.batch_weights = batch_weights
         self.positive_reward = positive_reward
         self.negative_reward = negative_reward
-        self.weighted_reward = weighted_reward
-        self.sigmoid = sigmoid
-        self.size_flexibility = size_flexibility
+        self.IC_reward = IC_reward
+        self.early_stopping = early_stopping
         self.prevent_cycles = prevent_cycles
         self.adjust_factor = adjust_factor
         start_entities = np.repeat(start_entities, self.num_rollouts)
@@ -413,7 +412,7 @@ class Episode(object):
                     all_rels[t, b] = -1.0
 
                 # If we reached the target entity, remaining steps are padding
-                if self.size_flexibility and e2 == self.end_entities[b]:
+                if self.early_stopping and e2 == self.end_entities[b]:
                     break
 
         self.recomputed_ic_per_step = [all_weights[t] for t in range(T)]
@@ -968,14 +967,13 @@ class Episode(object):
         size = np.sum(~mask_2, axis=0)       # [B]
         ## END FIX IC DECISION
 
-        punish_size = np.where(size >= 3, 0.5, 1)
-
         success_mask = (self.current_entities == self.end_entities)
 
-        if self.weighted_reward==True and self.sigmoid==False:
+        if self.IC_reward:
             positive_part = self.positive_reward * average_ic
         else:
             positive_part = self.positive_reward
+            print('[INFO] IC_reward disabled; using flat positive reward without IC scaling.')
 
         condlist   = [success_mask, ~success_mask]
         choicelist = [positive_part, self.negative_reward]
@@ -984,7 +982,7 @@ class Episode(object):
 
 
     def __call__(self, action):
-        if self.size_flexibility:
+        if self.early_stopping:
             self.current_hop += 1
             bsz = self.no_examples * self.num_rollouts
 
@@ -1085,10 +1083,9 @@ class env(object):
         self.llm_api = params.get('llm_api', False)
         self.llm_model = params.get('llm_model', 'qwen')
         self.local_model = params.get('local_model', 'Qwen/Qwen3.5-9B')
-        self.weighted_reward = params['weighted_reward']
+        self.IC_reward = params['IC_reward']
         self.adjust_factor = params['IC_importance']
-        self.sigmoid = params['sigmoid']
-        self.size_flexibility = params['size_flexibility']
+        self.early_stopping = params['early_stopping']
         self.batch_size = params['batch_size']
         self.num_rollouts = params['num_rollouts']
         self.positive_reward = params['positive_reward']
@@ -1127,7 +1124,7 @@ class env(object):
                                              )
 
     def get_episodes(self):
-        params = self.batch_size, self.path_len, self.num_rollouts, self.test_rollouts, self.positive_reward, self.negative_reward, self.mode, self.batcher, self.weighted_reward, self.adjust_factor, self.sigmoid, self.size_flexibility, self.prevent_cycles, self.persona_path, self.agentic_ai_enabled, self.llm_api, self.llm_model, self.local_model #NEW ADDITION OF PERSONA
+        params = self.batch_size, self.path_len, self.num_rollouts, self.test_rollouts, self.positive_reward, self.negative_reward, self.mode, self.batcher, self.IC_reward, self.adjust_factor, self.early_stopping, self.prevent_cycles, self.persona_path, self.agentic_ai_enabled, self.llm_api, self.llm_model, self.local_model
         if self.mode == 'train':
             for data in self.batcher.yield_next_batch_train():
                 yield Episode(self.grapher, data, params)

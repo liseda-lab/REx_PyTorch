@@ -24,3 +24,5 @@ model_load_dir="saved_models/oregano/drug_target/neutral_evaluator/best_ckpt.jso
 #tensorboard_dir="tensorboard/oregano_neutral_evaluator_DR/"
 agentic_ai_enabled=0
 persona_path=None
+llm_api=0
+llm_model=qwen

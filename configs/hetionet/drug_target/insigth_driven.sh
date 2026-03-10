@@ -25,3 +25,5 @@ model_load_dir="saved_models/hetionet/drug_target/insight_driven/best_ckpt.json"
 
 agentic_ai_enabled=1
 persona_path="personas/insight_driven.txt"
+llm_api=0
+llm_model=qwen

@@ -25,3 +25,5 @@ model_load_dir="saved_models/hetionet/drug_target/mechanistic_analyst/best_ckpt.
 
 agentic_ai_enabled=1
 persona_path="personas/mechanistic_analyst.txt"
+llm_api=0
+llm_model=qwen

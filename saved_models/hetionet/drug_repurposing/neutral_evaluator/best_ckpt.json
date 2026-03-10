@@ -1,6 +1,6 @@
 {
-  "best_step": 70,
+  "best_step": 60,
   "threshold": 0.55,
-  "timestamp": 1773094527.100807,
+  "timestamp": 1762463976.3346674,
   "model_path": "saved_models/hetionet/drug_repurposing/neutral_evaluator/model.ckpt"
 }

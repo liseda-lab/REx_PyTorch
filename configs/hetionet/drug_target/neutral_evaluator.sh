@@ -24,3 +24,5 @@ model_load_dir="saved_models/hetionet/drug_target/neutral_evaluator/best_ckpt.js
 #tensorboard_dir="tensorboard/hetionet_neutral_evaluator_dt/"
 agentic_ai_enabled=0
 persona_path=None
+llm_api=0
+llm_model=qwen

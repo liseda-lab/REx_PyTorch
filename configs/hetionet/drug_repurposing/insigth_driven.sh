@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-data_input_dir="datasets/hetionet_/drug_repurposing/"
-vocab_dir="datasets/hetionet_/drug_repurposing/vocab"
+data_input_dir="datasets/hetionet/drug_repurposing/"
+vocab_dir="datasets/hetionet/drug_repurposing/vocab"
 total_iterations=200
 path_length=3
 hidden_size=32
@@ -24,3 +24,5 @@ model_load_dir="saved_models/hetionet/drug_repurposing/insight_driven/best_ckpt.
 #tensorboard_dir="tensorboard/hetionet_insight_driven_DR/"
 agentic_ai_enabled=1
 persona_path="personas/insight_driven.txt"
+llm_api=1
+llm_model=qwen

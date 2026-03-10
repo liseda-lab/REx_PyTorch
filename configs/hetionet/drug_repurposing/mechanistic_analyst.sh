@@ -24,3 +24,5 @@ model_load_dir="saved_models/hetionet/drug_repurposing/mechanistic_analyst/best_
 #tensorboard_dir="tensorboard/hetionet_mechanistic_analyst_DR/"
 agentic_ai_enabled=1
 persona_path="personas/mechanistic_analyst.txt"
+llm_api=0
+llm_model=qwen

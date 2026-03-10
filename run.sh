@@ -17,7 +17,9 @@ cmd="python code/model/trainer.py --base_output_dir $base_output_dir \
     --weighted_reward $weighted_reward \
     --size_flexibility $size_flexibility \
     --agentic_ai_enabled $agentic_ai_enabled \
-    --persona_path $persona_path"
+    --persona_path $persona_path \
+    --llm_api ${llm_api:-0} \
+    --llm_model ${llm_model:-qwen}"
 
 echo "Executing $cmd"
 

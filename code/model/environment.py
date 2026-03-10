@@ -19,71 +19,67 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 #tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 
-#-----NEW 
-import json 
+#-----NEW
+import json
 from dotenv import load_dotenv
-load_dotenv()  # ADD THIS
-# Optional OpenAI client (kept safe if lib/key are missing)
-"""try:
-    from openai import OpenAI  
-    _agentic_client = OpenAI(
-        base_url="http://localhost:8000/v1",
-        api_key="EMPTY" 
-    ) 
-except Exception as _e:
-    _agentic_client = None
-    logger = logging.getLogger(__name__)
-    logger.warning("OpenAI client not available: %s", _e)"""
-#--------
+load_dotenv()
+
+# --- LLM setup ---
+# --llm_api 0 (default): loads Qwen 3.5 locally (needs GPU)
+# --llm_api 1 --llm_model qwen: Qwen via HuggingFace API
+# --llm_api 1 --llm_model gpt:  GPT via OpenAI API
+
+def _extract_json_response(response):
+    """Common helper to extract JSON array from LLM response text."""
+    responseSplit = response
+    if "<think>" in response and "</think>" in response:
+        responseSplit = response.split("</think>", 1)[1].strip()
+    json_start = responseSplit.find("[")
+    json_end = responseSplit.rfind("]")
+    if json_start != -1 and json_end > json_start:
+        candidate = responseSplit[json_start:json_end+1]
+        try:
+            json.loads(candidate)  # validate
+            return candidate, response
+        except json.JSONDecodeError:
+            pass
+    return "", response
+
 try:
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-    
+    # --- 1) Local Qwen 3.5  ---
     _llm_model = None
     _llm_tokenizer = None
     _llm_device = None
-    
+
     def _init_llm():
         global _llm_model, _llm_tokenizer, _llm_device
         if _llm_model is not None:
             return
-        
+        from transformers import AutoModelForCausalLM, AutoTokenizer
         MODEL_NAME = "Qwen/Qwen3.5-9B"
         print(f"[LLM] Loading {MODEL_NAME}...")
-        
         _llm_device = "cuda" if torch.cuda.is_available() else "cpu"
-        
         _llm_tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
         _llm_model = AutoModelForCausalLM.from_pretrained(
             MODEL_NAME,
             dtype=torch.bfloat16,
             device_map="auto"
-            )
-        
+        )
         print(f"[LLM] Ready on {_llm_device}")
-    
-    def _call_llm(messages, temperature=0):
-        global _llm_model, _llm_tokenizer, _llm_device
-        
-        if _llm_model is None:
-            _init_llm()
-        
+
+    def _call_llm_local(messages, temperature=0):
+        _init_llm()
         try:
             prompt = _llm_tokenizer.apply_chat_template(
-                messages, 
-                tokenize=False, 
-                add_generation_prompt=True,
-                enable_thinking=False
+                messages, tokenize=False,
+                add_generation_prompt=True, enable_thinking=False
             )
             inputs = _llm_tokenizer(prompt, return_tensors="pt").to(_llm_device)
-            
             with torch.no_grad():
                 outputs = _llm_model.generate(
-                    **inputs,
-                    max_new_tokens=3072,
-                    temperature=temperature,
-                    do_sample=True, # Check if these parameters are necessary
-                    top_p=0.9,
-                    pad_token_id=_llm_tokenizer.pad_token_id,
+                    **inputs, max_new_tokens=3072,
+                    temperature=temperature, do_sample=True,
+                    top_p=0.9, pad_token_id=_llm_tokenizer.pad_token_id,
                 )
             
             #response = _llm_tokenizer.decode(outputs[0], skip_special_tokens=True)
@@ -98,24 +94,105 @@ try:
 
             new_tokens = outputs[0][len(inputs.input_ids[0]):]
             response = _llm_tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
-            # Keeping raw response for later debugging if no JSON is found
-            responseSplit = response
-            
-            if "<think>" in response and "</think>" in response:
-                responseSplit = response.split("</think>", 1)[1].strip()
-            
-            json_start = responseSplit.find("[")
-            json_end = responseSplit.rfind("]")
-            
-            if json_start != -1 and json_end > json_start:
-                return responseSplit[json_start:json_end+1], response
-            
-            return response, response
-            
+            return _extract_json_response(response)
         except Exception as e:
-            print(f"[LLM ERROR] {e}")
-            return ""
-    
+            print(f"[LLM LOCAL ERROR] {e}")
+            return "", ""
+
+    # --- 2) Qwen via HuggingFace API (--llm_api 1 --llm_model qwen) ---
+    # Uses httpx directly (openai SDK bug with extra_body + enable_thinking)
+    import httpx as _httpx
+    _qwen_http_client = None
+
+    import time as _time
+
+    def _call_llm_qwen_api(messages, temperature=0):
+        global _qwen_http_client
+        base_url = os.getenv("HF_API_BASE", "https://router.huggingface.co/together/v1")
+        if _qwen_http_client is None:
+            _qwen_http_client = _httpx.Client(timeout=120.0)
+            print(f"[LLM] Qwen API mode via HuggingFace")
+        try:
+            model = os.getenv("HF_MODEL", "Qwen/Qwen3.5-9B")
+            resp = _qwen_http_client.post(
+                base_url + "/chat/completions",
+                headers={
+                    "Authorization": "Bearer " + os.getenv("HF_API_KEY", ""),
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model,
+                    "messages": messages,
+                    "max_tokens": 3072,
+                    "temperature": temperature if temperature > 0 else 0.01,
+                    "chat_template_kwargs": {"enable_thinking": False},
+                },
+            )
+            data = resp.json()
+            # rate limit / error handling
+            if "choices" not in data:
+                err_obj = data.get("error", data) if isinstance(data, dict) else data
+                err_msg = err_obj.get("message", str(err_obj)) if isinstance(err_obj, dict) else str(err_obj)
+                print(f"[LLM QWEN API ERROR] {err_msg}")
+                # if rate limited, wait and retry once
+                if resp.status_code == 429 or "rate" in err_msg.lower():
+                    wait = 5
+                    print(f"[LLM] Rate limited, waiting {wait}s...")
+                    _time.sleep(wait)
+                    resp = _qwen_http_client.post(
+                        base_url + "/chat/completions",
+                        headers={
+                            "Authorization": "Bearer " + os.getenv("HF_API_KEY", ""),
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": model,
+                            "messages": messages,
+                            "max_tokens": 3072,
+                            "temperature": temperature if temperature > 0 else 0.01,
+                            "chat_template_kwargs": {"enable_thinking": False},
+                        },
+                    )
+                    data = resp.json()
+                    if "choices" not in data:
+                        return "", ""
+                else:
+                    return "", ""
+            raw = data["choices"][0]["message"]["content"].strip()
+            _time.sleep(0.5)  # small delay to avoid rate limits
+            return _extract_json_response(raw)
+        except Exception as e:
+            print(f"[LLM QWEN API ERROR] {e}")
+            return "", ""
+
+    # --- 3) GPT via OpenAI API (--llm_api 1 --llm_model gpt) ---
+    _gpt_api_client = None
+
+    def _call_llm_gpt_api(messages, temperature=0):
+        global _gpt_api_client
+        if _gpt_api_client is None:
+            from openai import OpenAI
+            _gpt_api_client = OpenAI(
+                api_key=os.getenv("OPENAI_API_KEY", ""),
+                timeout=120.0,
+            )
+            print(f"[LLM] GPT API mode via OpenAI")
+        try:
+            model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+            resp = _gpt_api_client.chat.completions.create(
+                model=model, messages=messages,
+                max_tokens=3072,
+                temperature=temperature if temperature > 0 else 0.01,
+            )
+            raw = resp.choices[0].message.content.strip()
+            return _extract_json_response(raw)
+        except Exception as e:
+            print(f"[LLM GPT API ERROR] {e}")
+            return "", ""
+
+    # Default to local; Episode.__init__ overrides based on --llm_api / --llm_model
+    _call_llm = _call_llm_local
+
 except Exception as _e:
     _call_llm = None
     logger.warning("LLM not available: %s", _e)
@@ -163,7 +240,17 @@ class Episode(object):
 
     def __init__(self, graph, data, params):
         self.grapher = graph
-        self.batch_size, self.path_len, num_rollouts, test_rollouts, positive_reward, negative_reward, mode, batcher, weighted_reward, adjust_factor, sigmoid, size_flexibility, prevent_cycles, persona_path, agentic_ai_enabled  = params  # NEW - ADITION OF PERSONA PATH
+        self.batch_size, self.path_len, num_rollouts, test_rollouts, positive_reward, negative_reward, mode, batcher, weighted_reward, adjust_factor, sigmoid, size_flexibility, prevent_cycles, persona_path, agentic_ai_enabled, llm_api, llm_model  = params  # NEW - ADITION OF PERSONA PATH
+        ## FIX TEST - set LLM caller based on --llm_api / --llm_model
+        global _call_llm
+        if llm_api:
+            if llm_model == 'gpt':
+                _call_llm = _call_llm_gpt_api
+            else:
+                _call_llm = _call_llm_qwen_api
+        else:
+            _call_llm = _call_llm_local
+        ## END FIX TEST
         self.mode = mode
         if self.mode == 'train':
             self.num_rollouts = num_rollouts
@@ -679,7 +766,7 @@ class Episode(object):
                     if missing or len(by_id) != len(id_list):
                         print(f"[WARN] ID-mismatch: expected {len(id_list)}, got {len(by_id)}, "
                             f"filled defaults for {missing} ids")
-                        print(f"[DEBUG] Prompt was:\n{prompt}\n")
+                       # print(f"[DEBUG] Prompt was:\n{prompt}\n")
                         print(f"[DEBUG] Raw response was:\n{raw}\n")
                     return out
                     
@@ -727,40 +814,13 @@ class Episode(object):
             self.llm_dimensions = {}
             self.reward_kind = np.array(['ic_only'] * B, dtype=object)
             return base
-        # <
 
-        # if training_step < 50:
-        #     # Just return the IC-based rewards directly
-        #     return base  # Simple and effective
-        # PHASE 2: Persona-based refinement
-        # Now we have a model that knows how to find paths
-        # Time to shape those paths according to persona preferences
-
-        # # Progressive threshold
-        # if training_step < 60:
-        #     threshold = 0.5
-        # elif training_step < 80:
-        #     threshold = 0.55
-        # elif training_step < 120:
-        #     threshold = 0.6
-        # elif training_step < 150:
-        #     threshold = 0.65
-        # else:
-        #     threshold = 0.7
-        
         threshold = threshold_for_step(training_step)
         
         # Three tiers of paths
         high_ic_idxs = np.where(base > threshold)[0].tolist()
         medium_ic_idxs = np.where((base > 0.5) & (base <= threshold))[0].tolist() if threshold > 0.5 else []
         low_ic_idxs = np.where((base > 0.3) & (base <= 0.5))[0].tolist()  # NEW tier
-        
-
-        #Log distribution
-        # print(f"[STEP {training_step}] Threshold={threshold:.2f}")
-        # print(f"  High IC (>{threshold:.2f}): {len(high_ic_idxs)} paths for LLM")
-        # print(f"  Medium IC (0.5-{threshold:.2f}): {len(medium_ic_idxs)} paths get 0.25")
-        # print(f"  Low IC (0.3-0.5): {len(low_ic_idxs)} paths get 0.1")
         
         lines = [
             f"[STEP {training_step}] Threshold={threshold:.2f}",
@@ -1042,8 +1102,10 @@ class Episode(object):
 
 class env(object):
     def __init__(self, params, mode='train'):
-        self.persona_path = params['persona_path'] # NEW 
-        self.agentic_ai_enabled = params['agentic_ai_enabled'] # NEW 
+        self.persona_path = params['persona_path'] # NEW
+        self.agentic_ai_enabled = params['agentic_ai_enabled'] # NEW
+        self.llm_api = params.get('llm_api', False)
+        self.llm_model = params.get('llm_model', 'qwen')
         self.weighted_reward = params['weighted_reward']
         self.adjust_factor = params['IC_importance']
         self.sigmoid = params['sigmoid']
@@ -1086,7 +1148,7 @@ class env(object):
                                              )
 
     def get_episodes(self):
-        params = self.batch_size, self.path_len, self.num_rollouts, self.test_rollouts, self.positive_reward, self.negative_reward, self.mode, self.batcher, self.weighted_reward, self.adjust_factor, self.sigmoid, self.size_flexibility, self.prevent_cycles, self.persona_path, self.agentic_ai_enabled #NEW ADDITION OF PERSONA
+        params = self.batch_size, self.path_len, self.num_rollouts, self.test_rollouts, self.positive_reward, self.negative_reward, self.mode, self.batcher, self.weighted_reward, self.adjust_factor, self.sigmoid, self.size_flexibility, self.prevent_cycles, self.persona_path, self.agentic_ai_enabled, self.llm_api, self.llm_model #NEW ADDITION OF PERSONA
         if self.mode == 'train':
             for data in self.batcher.yield_next_batch_train():
                 yield Episode(self.grapher, data, params)

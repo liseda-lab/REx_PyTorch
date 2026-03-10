@@ -24,3 +24,5 @@ model_load_dir="saved_models/hetionet/drug_repurposing/neutral_evaluator/best_ck
 #tensorboard_dir="tensorboard/hetionet_neutral_evaluator_DR/"
 agentic_ai_enabled=0
 persona_path=None
+llm_api=0
+llm_model=qwen

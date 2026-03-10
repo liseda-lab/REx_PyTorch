@@ -52,6 +52,10 @@ def read_options():
                         help="Enable Agentic AI persona-shaped scoring (1 = on, 0 = off)")
     parser.add_argument("--persona_path", default="", type=str,
                         help="Path to persona text file for Agentic AI")
+    parser.add_argument("--llm_api", default=0, type=int,
+                        help="Use LLM via API instead of local (1 = api, 0 = local)")
+    parser.add_argument("--llm_model", default="qwen", type=str,
+                        help="Which model to use when llm_api=1 (gpt or qwen)")
 
     
     try:
@@ -69,7 +73,8 @@ def read_options():
     parsed['sigmoid'] = (parsed['sigmoid'] == 1)
     parsed['size_flexibility'] = (parsed['size_flexibility'] == 1)
     parsed['prevent_cycles'] = (parsed['prevent_cycles'] == 1)
-    parsed['agentic_ai_enabled'] = (parsed['agentic_ai_enabled'] == 1) # NEW 
+    parsed['agentic_ai_enabled'] = (parsed['agentic_ai_enabled'] == 1) # NEW
+    parsed['llm_api'] = (parsed['llm_api'] == 1)
 
 
 

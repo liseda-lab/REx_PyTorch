@@ -24,3 +24,5 @@ model_load_dir="saved_models/primekg/drug_repurposing/neutral_evaluator/best_ckp
 #tensorboard_dir="tensorboard/primekg_neutral_evaluator_DR/"
 agentic_ai_enabled=0
 persona_path=None
+llm_api=0
+llm_model=qwen

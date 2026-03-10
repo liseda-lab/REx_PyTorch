@@ -20,7 +20,7 @@ max_num_actions=400
 early_stopping=1
 agentic_ai_enabled=0
 IC_reward=1
-load_model=1
+load_model=0
 model_load_dir="saved_models/hetionet/drug_repurposing/neutral_evaluator/best_ckpt.json"
 
 persona_path=None

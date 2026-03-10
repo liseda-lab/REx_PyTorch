@@ -49,11 +49,7 @@ Where:
 - The vocab files are created by using the `create_vocab.py` file.
 
 
-**Note1**: The existing datasets have the graph.txt file divided into one or more files. Just run the following command in the dataset directory:
-
-```sh
-cat graph_part*.txt > graph.txt
-```
+**Note1**: The existing datasets have the `graph.txt` file divided into smaller parts (`graph_part*.txt`) due to GitHub file size limits. The system **automatically assembles** `graph.txt` from these parts on the first run — no manual step needed.
 
 **Note2**: The adaptive version of REx uses a large language model for persona-shaped scoring. There are three modes controlled by `--llm_api` and `--llm_model`:
 

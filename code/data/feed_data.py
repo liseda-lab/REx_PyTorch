@@ -5,10 +5,28 @@ from collections import defaultdict
 import csv
 import random
 import os
+import glob
+
+
+def assemble_graph(data_dir):
+    """If graph.txt doesn't exist but graph_part*.txt files do, assemble them."""
+    graph_path = os.path.join(data_dir, 'graph.txt')
+    if os.path.exists(graph_path):
+        return
+    parts = sorted(glob.glob(os.path.join(data_dir, 'graph_part*.txt')))
+    if not parts:
+        return
+    print(f"[AUTO] Assembling graph.txt from {len(parts)} parts in {data_dir} ...")
+    with open(graph_path, 'w') as out:
+        for part in parts:
+            with open(part, 'r') as inp:
+                out.write(inp.read())
+    print(f"[AUTO] graph.txt assembled ({os.path.getsize(graph_path) / 1024 / 1024:.1f} MB)")
 
 
 class RelationEntityBatcher():
     def __init__(self, input_dir, batch_size, entity_vocab, relation_vocab, edges_weight, mode = "train"):
+        assemble_graph(input_dir)
         self.input_dir = input_dir
         self.input_file = input_dir+'/{0}.txt'.format(mode)
         self.batch_size = batch_size

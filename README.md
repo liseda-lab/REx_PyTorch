@@ -5,24 +5,20 @@ This is the pytorch implementation for the REx [paper](https://www.ijcai.org/pro
 ## Guide to run the system
 
 ### Prerequisites
-- UV installed on your machine
-
-### Installing dependencies
-To install the necessary dependencies, provided UV is installed, simply run the following command: 
-
-```sh
-uv sync
-```
-
+- UV installed on your machine. Any necessary dependencies will be automatically installed when you run the approach for the first time. For more information on UV, please check the [UV documentation](https://docs.astral.sh/uv/getting-started/installation/).
 
 ### Running
-Once inside the folder, to run it, you will need to run the following command:
+Run the following command inside the main directory of the project:
 
 ```sh
 uv run bash run.sh configs/{dataset}/{task}/{persona}
 ```
 
-Where `{dataset}` is the name of the dataset you would like to run the approach on, and `{task}`is drug_repurposing or drug_target (interaction). `{persona}` is an extension of REx for adaptive explanations, for the original implementation of REx always choose `neutral_evaluator`.  Take this example: `uv run bash run.sh configs/hetionet/drug_repurposing/neutral_evaluator.sh`
+Where `{dataset}` is the name of the dataset you would like to run the approach on, and `{task}`is drug_repurposing or drug_target (interaction). `{persona}` is an extension of REx for adaptive explanations, for the original implementation of REx always choose `neutral_evaluator`.  Take this example: 
+
+```sh
+uv run bash run.sh configs/hetionet/drug_repurposing/neutral_evaluator.sh
+```
 
 ### Datasets 
 Datasets should have the following files:

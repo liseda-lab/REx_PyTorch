@@ -116,11 +116,13 @@ class Trainer(object):
             self.test_environment = self.dev_test_environment
             self.rev_relation_vocab = self.train_environment.grapher.rev_relation_vocab
             self.rev_entity_vocab = self.train_environment.grapher.rev_entity_vocab
+            self._relation_labels = self.train_environment.grapher.relation_labels
         else:
             self.test_test_environment = env(params, 'test')
             self.test_environment = self.test_test_environment
             self.rev_relation_vocab = self.test_test_environment.grapher.rev_relation_vocab
             self.rev_entity_vocab = self.test_test_environment.grapher.rev_entity_vocab
+            self._relation_labels = self.test_test_environment.grapher.relation_labels
         ## END FIX TEST
 
         self.max_hits_at_10 = 0 # Track max hits at 10
@@ -164,32 +166,50 @@ class Trainer(object):
 
         ## NEW: try to load ontology DAGs for LCA computation
         self._lca_ready = False
-        try:
-            import networkx as _nx
-            from rdflib import URIRef as _URIRef
-            onto_dir = "ontologies"
-            ncit_path  = os.path.join(onto_dir, "NCIT_HETIONET_DAG.pkl")
-            chebi_path = os.path.join(onto_dir, "CHEBI_HETIONET_DAG.pkl")
-            onto_labels_path = os.path.join(onto_dir, "onto_labels.json")
+        import time as _time
+        import socket as _socket
+        _LCA_MAX_ATTEMPTS = 3
 
-            if all(os.path.exists(p) for p in [ncit_path, chebi_path, onto_labels_path]):
-                with open(ncit_path, 'rb') as f:
-                    self._dag_ncit = pickle.load(f)
-                with open(chebi_path, 'rb') as f:
-                    self._dag_chebi = pickle.load(f)
-                with open(onto_labels_path, 'r', encoding='utf-8') as f:
-                    self._onto_labels = json.load(f)
-                self._too_general = {
-                    'http://ncicb.nci.nih.gov/xml/owl/EVS/Thesaurus.owl#C7057',
-                    'http://ncicb.nci.nih.gov/xml/owl/EVS/Thesaurus.owl#C1909',
-                    'http://ncicb.nci.nih.gov/xml/owl/EVS/Thesaurus.owl#C1908',
-                }
-                self._lca_ready = True
-                logger.info("[LCA] Ontology DAGs loaded successfully")
-            else:
-                logger.info("[LCA] Ontology files not found, LCA disabled")
-        except Exception as e:
-            logger.warning(f"[LCA] Could not initialize: {e}")
+        for _lca_attempt in range(1, _LCA_MAX_ATTEMPTS + 1):
+            try:
+                import networkx as _nx
+
+                # rdflib can timeout during import (plugin discovery makes network calls)
+                _orig_timeout = _socket.getdefaulttimeout()
+                _socket.setdefaulttimeout(10)
+                try:
+                    from rdflib import URIRef as _URIRef
+                finally:
+                    _socket.setdefaulttimeout(_orig_timeout)
+
+                onto_dir = "ontologies"
+                ncit_path  = os.path.join(onto_dir, "NCIT_HETIONET_DAG.pkl")
+                chebi_path = os.path.join(onto_dir, "CHEBI_HETIONET_DAG.pkl")
+                onto_labels_path = os.path.join(onto_dir, "onto_labels.json")
+
+                if all(os.path.exists(p) for p in [ncit_path, chebi_path, onto_labels_path]):
+                    with open(ncit_path, 'rb') as f:
+                        self._dag_ncit = pickle.load(f)
+                    with open(chebi_path, 'rb') as f:
+                        self._dag_chebi = pickle.load(f)
+                    with open(onto_labels_path, 'r', encoding='utf-8') as f:
+                        self._onto_labels = json.load(f)
+                    self._too_general = {
+                        'http://ncicb.nci.nih.gov/xml/owl/EVS/Thesaurus.owl#C7057',
+                        'http://ncicb.nci.nih.gov/xml/owl/EVS/Thesaurus.owl#C1909',
+                        'http://ncicb.nci.nih.gov/xml/owl/EVS/Thesaurus.owl#C1908',
+                    }
+                    self._lca_ready = True
+                    logger.info("[LCA] Ontology DAGs loaded successfully")
+                else:
+                    logger.info("[LCA] Ontology files not found, LCA disabled")
+                break  # success, stop retrying
+            except Exception as e:
+                logger.warning(f"[LCA] Init attempt {_lca_attempt}/{_LCA_MAX_ATTEMPTS} failed: {e}")
+                if _lca_attempt < _LCA_MAX_ATTEMPTS:
+                    _time.sleep(3)
+                else:
+                    logger.warning("[LCA] All attempts failed, LCA disabled")
         ## END NEW
 
     def set_random_seed(self, seed):
@@ -218,6 +238,9 @@ class Trainer(object):
             from rdflib import URIRef
 
             nodes = [URIRef(f"http://onto/{eid}") for eid in entity_ids]
+            # Verify nodes actually exist in at least one DAG before expensive LCA
+            if not any(n in self._dag_ncit or n in self._dag_chebi for n in nodes):
+                return None
             lcas = defaultdict(set)
 
             for dag, dag_nodes in [
@@ -244,7 +267,7 @@ class Trainer(object):
                 lbl2 = self._node_labels.get(eid2, eid2)
                 key = f"{lbl1},{lbl2}"
                 result[key] = [
-                    self._onto_labels.get(str(anc), str(anc))
+                    self._onto_labels.get(str(anc), str(anc)).title()
                     for anc in anc_set
                 ]
             return result
@@ -311,7 +334,7 @@ class Trainer(object):
             edges.append({
                 "source": self._node_labels.get(ent_ids[i], ent_ids[i]),
                 "target": self._node_labels.get(ent_ids[i + 1], ent_ids[i + 1]),
-                "label": rel,
+                "label": self._relation_labels.get(rel, rel),
             })
 
         entry = {
@@ -658,6 +681,7 @@ class Trainer(object):
         }
 
         correct_groups = {}
+        all_tested_pairs = []  # track every pair tested, in order
 
         # Set our agent to evaluation mode
         self.agent.eval()
@@ -852,6 +876,7 @@ class Trainer(object):
                     qr = self.rev_relation_vocab[self.qr[b * self.test_rollouts]]  ## FIX TEST
                     start_e = self.rev_entity_vocab[episode.start_entities[b * self.test_rollouts]]
                     end_e = self.rev_entity_vocab[episode.end_entities[b * self.test_rollouts]]
+                    all_tested_pairs.append(f"{start_e} - {end_e}")
                     paths[str(qr)].append(str(start_e) + "\t" + str(end_e) + "\n")
                     paths[str(qr)].append("Reward:" + str(1 if answer_pos != None and answer_pos < 10 else 0) + "\n")
                     trimmed = trim_and_rank_batch(
@@ -1030,10 +1055,19 @@ class Trainer(object):
         self.log_results(final_rewards)
 
         # Build output JSON in new pairs/paths format (matches teste_output.json)
-        if correct_groups:
-            pairs_list = []
-            path_counter = 1
-            for pair_id, path_entries in correct_groups.items():
+        # Use unique ordered pairs (preserve test order, deduplicate)
+        seen_pairs = set()
+        unique_tested_pairs = []
+        for pid in all_tested_pairs:
+            if pid not in seen_pairs:
+                seen_pairs.add(pid)
+                unique_tested_pairs.append(pid)
+
+        pairs_list = []
+        path_counter = 1
+        for pair_id in unique_tested_pairs:
+            if pair_id in correct_groups:
+                path_entries = correct_groups[pair_id]
                 # Sort by final_score descending
                 path_entries.sort(key=lambda x: x["score"]["final_score"], reverse=True)
                 # Assign sequential path IDs
@@ -1044,12 +1078,22 @@ class Trainer(object):
                     "id": pair_id,
                     "paths": path_entries,
                 })
+            else:
+                # No correct paths found for this pair
+                pairs_list.append({
+                    "id": pair_id,
+                    "warning": "No valid explanation paths found for this pair. "
+                               "The model could not reach the target entity.",
+                    "paths": [],
+                })
 
-            output = {"pairs": pairs_list}
-            json_path = self.path_logger_file_ + "_final_paths.json"
-            with open(json_path, "w", encoding="utf-8") as f:
-                json.dump(output, f, ensure_ascii=False, indent=2)
-            logger.info(f"[SAVED] Correct grouped JSON → {json_path}")
+        output = {"pairs": pairs_list}
+        json_path = self.path_logger_file_ + ".json"
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(output, f, ensure_ascii=False, indent=2)
+        logger.info(f"[SAVED] Grouped JSON → {json_path} "
+                     f"({sum(1 for p in pairs_list if p['paths'])} with paths, "
+                     f"{sum(1 for p in pairs_list if not p['paths'])} with warnings)")
 
 
         return final_rewards["MRR"]

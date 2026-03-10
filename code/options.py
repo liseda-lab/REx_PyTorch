@@ -86,8 +86,8 @@ def read_options():
     timestamp = datetime.datetime.now().strftime("%d-%m_%H:%M:%S")
 
 
-    parsed['output_dir'] = parsed['base_output_dir'] + f'/{timestamp}_Plength-{parsed["path_length"]}_AgenticAI-{parsed["agentic_ai_enabled"]}'
-
+    #parsed['output_dir'] = parsed['base_output_dir'] + f'/{timestamp}_Plength-{parsed["path_length"]}_AgenticAI-{parsed["agentic_ai_enabled"]}'
+    parsed['output_dir'] = parsed['base_output_dir'] + f'/{timestamp}'
     
     parsed['model_dir'] = parsed['output_dir']+'/'+ 'model/'
 

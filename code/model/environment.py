@@ -84,11 +84,16 @@ try:
             )
             model_device = next(_llm_model.parameters()).device
             inputs = _llm_tokenizer(prompt, return_tensors="pt").to(model_device)
+            # temperature=0 with do_sample=True causes inf/nan on MPS (division by ~0)
+            if temperature <= 0:
+                gen_kwargs = dict(do_sample=False)
+            else:
+                gen_kwargs = dict(do_sample=True, temperature=max(temperature, 0.01), top_p=0.9)
             with torch.no_grad():
                 outputs = _llm_model.generate(
                     **inputs, max_new_tokens=3072,
-                    temperature=temperature, do_sample=True,
-                    top_p=0.9, pad_token_id=_llm_tokenizer.pad_token_id,
+                    **gen_kwargs,
+                    pad_token_id=_llm_tokenizer.pad_token_id,
                 )
             
             #response = _llm_tokenizer.decode(outputs[0], skip_special_tokens=True)
@@ -674,6 +679,10 @@ class Episode(object):
 
             id_list = list(map(int, batch_idxs))
 
+            # Debug: show first path text sent to LLM (remove after confirming labels are correct)
+            #first_path_line = next((l for l in paths_text.splitlines() if l.startswith("Path ")), "")
+            #print(f"[DEBUG LLM INPUT] First path line: {first_path_line}")
+
             prompt = f"""
             You are evaluating drug–disease explanation paths from the perspective of the following persona:
 
@@ -714,7 +723,7 @@ class Episode(object):
                     #messages = [{"role": "system", "content": "You are a JSON generator. Respond ONLY with valid JSON. Do not explain or output anything except JSON. Think before producing a final response."}, {"role": "user", "content": prompt}]
                     messages = [{"role": "user", "content": prompt}]
                     resp, raw = _call_llm(messages, temperature=1.0)
-                    print(f"[DEBUG] Parsed response: {resp}")
+                    #print(f"[DEBUG] Parsed response: {resp}")
 
                     # tolerate fenced code blocks
                     if "```" in resp:

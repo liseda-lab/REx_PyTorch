@@ -1,0 +1,88 @@
+Score for iteration 10
+Hits@1:  0.0083
+Hits@3:  0.0083
+Hits@5:  0.0083
+Hits@10:  0.0248
+Hits@20:  0.0413
+MRR:  0.0118
+
+Score for iteration 20
+Hits@1:  0.0083
+Hits@3:  0.0083
+Hits@5:  0.0083
+Hits@10:  0.0083
+Hits@20:  0.0248
+MRR:  0.0105
+
+Score for iteration 30
+Hits@1:  0.0165
+Hits@3:  0.0165
+Hits@5:  0.0248
+Hits@10:  0.0248
+Hits@20:  0.0413
+MRR:  0.0216
+
+Score for iteration 40
+Hits@1:  0.0083
+Hits@3:  0.0083
+Hits@5:  0.0165
+Hits@10:  0.0165
+Hits@20:  0.0579
+MRR:  0.0144
+
+Score for iteration 50
+Hits@1:  0.0744
+Hits@3:  0.1240
+Hits@5:  0.1736
+Hits@10:  0.1983
+Hits@20:  0.2314
+MRR:  0.1155
+
+Score for iteration 60
+Hits@1:  0.1818
+Hits@3:  0.3554
+Hits@5:  0.3967
+Hits@10:  0.5207
+Hits@20:  0.6033
+MRR:  0.2916
+
+Score for iteration 70
+Hits@1:  0.2810
+Hits@3:  0.4298
+Hits@5:  0.4545
+Hits@10:  0.5289
+Hits@20:  0.6364
+MRR:  0.3702
+
+Score for iteration 80
+Hits@1:  0.2479
+Hits@3:  0.3471
+Hits@5:  0.4298
+Hits@10:  0.5124
+Hits@20:  0.5868
+MRR:  0.3277
+
+Score for iteration 90
+Hits@1:  0.1983
+Hits@3:  0.2975
+Hits@5:  0.3306
+Hits@10:  0.4463
+Hits@20:  0.5041
+MRR:  0.2728
+
+Score for iteration 100
+Hits@1:  0.1570
+Hits@3:  0.3058
+Hits@5:  0.3554
+Hits@10:  0.4298
+Hits@20:  0.4711
+MRR:  0.2479
+
+Test (beam) scores with best model from output/hetionet_leo_DR_bestThreshold//08-03_16:20:27_Plength-3_AgenticAI-True/model/
+Hits@1:  0.2517
+Hits@3:  0.4437
+Hits@5:  0.4901
+Hits@10:  0.5563
+Hits@20:  0.6291
+MRR:  0.3611
+

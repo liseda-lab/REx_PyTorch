@@ -55,7 +55,7 @@ Where:
 
 | Mode | Flag | Model | Requirement |
 |------|------|-------|-------------|
-| Local (default) | `--llm_api 0` | Set by `--local_model` | GPU recommended |
+| Local (default) | `--llm_api 0` | Set by `--local_model` | High performance GPU (~RTX 5090) necessary |
 | Qwen API | `--llm_api 1 --llm_model qwen` | Qwen via HuggingFace | HF API key in `.env` |
 | GPT API | `--llm_api 1 --llm_model gpt` | GPT via OpenAI | OpenAI key in `.env` |
 
@@ -64,8 +64,8 @@ For local mode, the `--local_model` parameter controls which model is loaded (de
 | Model | Download Size | RAM/VRAM | Recommended for |
 |-------|--------------|----------|-----------------|
 | `Qwen/Qwen3-1.7B` | ~3.4 GB | ~5 GB | Quick testing on CPU |
-| `Qwen/Qwen3-4B` | ~8 GB | ~10 GB | Testing light GPU |
-| `Qwen/Qwen3.5-9B` | ~18 GB | ~20 GB | Training (needs GPU) |
+| `Qwen/Qwen3-4B` | ~8 GB | ~10 GB | Testing on light GPU |
+| `Qwen/Qwen3.5-9B` | ~18 GB | ~20 GB | Training (needs powerful GPU) |
 
 The parameter viz_mode changes the default mode to `Qwen/Qwen3-4B` and only saves a final json with the generated explanations without any scores, metrics or logs.This is useful for testing few explanations at a time and for generating explanations on CPU (not advised for training). 
 

@@ -788,7 +788,7 @@ class Trainer(object):
                     
                     test_action_idx = x
                     chosen_relation = state['next_relations'][np.arange(temp_batch_size*k), x]
-                    chosen_relation = torch.tensor(chosen_relation, dtype=torch.long, device=self.device)
+                    chosen_relation_tensor = torch.tensor(chosen_relation, dtype=torch.long, device=self.device)
                     beam_probs = new_scores[y, x]
                     beam_probs = beam_probs.reshape((-1, 1))
 
@@ -797,7 +797,7 @@ class Trainer(object):
                             self.entity_trajectory[j] = self.entity_trajectory[j][y]
                             self.relation_trajectory[j] = self.relation_trajectory[j][y]
 
-                previous_relation = chosen_relation
+                previous_relation = chosen_relation_tensor
 
                 if print_paths:
                     self.entity_trajectory.append(state['current_entities'])

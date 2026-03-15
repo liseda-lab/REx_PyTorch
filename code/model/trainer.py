@@ -60,7 +60,7 @@ def trim_and_rank_batch(entity_traj, relation_traj, log_probs, end_entities, bat
             first_hit = np.argmax(hits) if hits.any() else T-1
             paths.append({
                 'entities':    ents_b[:first_hit+1, r].tolist(),
-                'relations':   rels_b[:first_hit+1, r].tolist(),
+                'relations':   rels_b[:first_hit, r].tolist(),
                 'score':       float(scores[r]),
                 'rollout_idx': r
             })
@@ -634,7 +634,7 @@ class Trainer(object):
                     score_file.write("Score for iteration " + str(self.batch_counter) + "\n")
                 
                 #os.mkdir(self.path_logger_file + "/" + str(self.batch_counter))  # FIX TEST - removed numbered folders
-                #self.path_logger_file_ = self.path_logger_file + "/" + str(self.batch_counter) + "/paths"
+                self.path_logger_file_ = self.path_logger_file + "/paths"
                 
                 current_mrr = self.test(beam=True, print_paths=False)
             

@@ -22,5 +22,5 @@ IC_reward=1
 agentic_ai_enabled=0
 persona_path=None
 load_model=0
-model_load_dir= "saved_models/primekg/drug_target/neutral_evaluator/best_ckpt.json"
+model_load_dir="saved_models/primekg/drug_target/neutral_evaluator/best_ckpt.json"
 viz_mode=0

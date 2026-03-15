@@ -1,0 +1,64 @@
+Score for iteration 10
+Hits@1:  0.0222
+Hits@3:  0.0486
+Hits@5:  0.0617
+Hits@10:  0.0881
+Hits@20:  0.1210
+MRR:  0.0446
+
+Score for iteration 20
+Hits@1:  0.0317
+Hits@3:  0.0704
+Hits@5:  0.0905
+Hits@10:  0.1255
+Hits@20:  0.1798
+MRR:  0.0643
+
+Score for iteration 30
+Hits@1:  0.0733
+Hits@3:  0.1465
+Hits@5:  0.1938
+Hits@10:  0.2786
+Hits@20:  0.3535
+MRR:  0.1355
+
+Score for iteration 40
+Hits@1:  0.1165
+Hits@3:  0.2329
+Hits@5:  0.2844
+Hits@10:  0.3733
+Hits@20:  0.4498
+MRR:  0.1986
+
+Score for iteration 50
+Hits@1:  0.0996
+Hits@3:  0.2049
+Hits@5:  0.2683
+Hits@10:  0.3700
+Hits@20:  0.4634
+MRR:  0.1826
+
+Score for iteration 60
+Hits@1:  0.1058
+Hits@3:  0.2086
+Hits@5:  0.2827
+Hits@10:  0.3802
+Hits@20:  0.4794
+MRR:  0.1912
+
+Score for iteration 70
+Hits@1:  0.0897
+Hits@3:  0.2004
+Hits@5:  0.2663
+Hits@10:  0.3613
+Hits@20:  0.4519
+MRR:  0.1753
+
+Test (beam) scores with best model from output/hetionet/drug_target/neutral_evaluator//13-03_17:29:08/model/
+Hits@1:  0.1112
+Hits@3:  0.2207
+Hits@5:  0.2869
+Hits@10:  0.3875
+Hits@20:  0.4705
+MRR:  0.1962
+

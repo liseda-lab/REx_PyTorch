@@ -524,11 +524,11 @@ class Trainer(object):
         self.batch_counter = 0
         cumulative_reward = 0
 
-        # Set our agent to training mode, as it extends nn.Module
-        self.agent.train()
-
         # Iterate through episodes from the training environment
         for episode in self.train_environment.get_episodes():
+            # Set our agent to training mode, as it extends nn.Module
+            self.agent.train()
+            
             self.batch_counter += 1
             Episode.set_training_step(self.batch_counter)
             self.global_step_tensor = self.batch_counter

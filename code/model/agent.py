@@ -24,7 +24,7 @@ class Agent(nn.Module):
         self.entity_vocab_size = len(params['entity_vocab'])
         self.embedding_size = params['embedding_size']
         self.hidden_size = params['hidden_size']
-        self.ePAD = int(params['entity_vocab']['PAD']) #//TODO: decide if tf.constant converted to int instead of tensor?
+        self.ePAD = int(params['entity_vocab']['PAD'])
         self.rPAD = int(params['relation_vocab']['PAD'])
         self.train_entities = params['train_entity_embeddings']
         self.train_relations = params['train_relation_embeddings']
@@ -129,7 +129,6 @@ class Agent(nn.Module):
         prev_action_embedding = self.action_encoder(prev_relation, current_entities)
 
         # Performe one step of the LSTM with the previous action embedding
-        # //NOTE: Do we need to unsqueeze -> squeeze?
         output, new_state = self.policy_step(prev_action_embedding.unsqueeze(1), prev_state)  # output: [B, 1, hidden_size]
         output = output.squeeze(1)  # output: [B, hidden_size]
 
@@ -146,7 +145,7 @@ class Agent(nn.Module):
 
         # Apply MLP to compute scores for the candidate actions
         output = self.policy_MLP(state_query_concat)
-        output_expanded = output.unsqueeze(1)  # Expand dimensions to match candidate embeddings, //NOTE: supposedly equivalent to tf.expand_dims
+        output_expanded = output.unsqueeze(1)  # Expand dimensions to match candidate embeddings
 
         # Compute preliminary scores by matching actions with the policy output (logits)
         # logits are the dot product between the agent state and the embeddings of the candidate actions
@@ -174,7 +173,7 @@ class Agent(nn.Module):
 
         # Map back to the true action indices
         action_idx = torch.squeeze(action)
-        chosen_relation = next_relations[range_arr, action_idx] # //TODO: check if this is correct, i'm not sure (GPT suggested this)
+        chosen_relation = next_relations[range_arr, action_idx]
 
         return loss, new_state, nnf.log_softmax(scores, dim=-1), action_idx, chosen_relation
 

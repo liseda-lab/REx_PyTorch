@@ -724,6 +724,10 @@ class Episode(object):
                     resp, raw = _call_llm(messages, temperature=1.0)
                     #print(f"[DEBUG] Parsed response: {resp}")
 
+                    if resp == "[]":
+                        print(f"[WARN] LLM returned empty array. Raw response: {raw}")
+                        raise ValueError("LLM returned empty array")
+
                     # tolerate fenced code blocks
                     if "```" in resp:
                         parts = resp.split("```")

@@ -67,9 +67,15 @@ try:
         else:
             _llm_device = "cpu"
         _llm_tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, token=hf_token)
+        if _llm_device == "cpu":
+            model_dtype = torch.float32
+        elif _llm_device == "mps":
+            model_dtype = torch.float16   # bfloat16 causes inf/nan on MPS during sampling
+        else:
+            model_dtype = torch.bfloat16
         _llm_model = AutoModelForCausalLM.from_pretrained(
             MODEL_NAME,
-            dtype=torch.bfloat16 if _llm_device != "cpu" else torch.float32,
+            dtype=model_dtype,
             device_map="auto",
             token=hf_token,
         )
@@ -90,11 +96,25 @@ try:
             else:
                 gen_kwargs = dict(do_sample=True, temperature=max(temperature, 0.01), top_p=0.9)
             with torch.no_grad():
-                outputs = _llm_model.generate(
-                    **inputs, max_new_tokens=3072,
-                    **gen_kwargs,
-                    pad_token_id=_llm_tokenizer.pad_token_id,
-                )
+                try:
+                    outputs = _llm_model.generate(
+                        **inputs, max_new_tokens=3072,
+                        **gen_kwargs,
+                        pad_token_id=_llm_tokenizer.pad_token_id,
+                    )
+                except RuntimeError as gen_err:
+                    if "probability tensor" in str(gen_err) and gen_kwargs.get("do_sample"):
+                        print("[LLM] inf/nan in sampling; retrying with greedy decoding")
+                        import warnings
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore")
+                            outputs = _llm_model.generate(
+                                **inputs, max_new_tokens=3072,
+                                do_sample=False,
+                                pad_token_id=_llm_tokenizer.pad_token_id,
+                            )
+                    else:
+                        raise
             
             #response = _llm_tokenizer.decode(outputs[0], skip_special_tokens=True)
             #raw = response[len(prompt):].strip()
@@ -108,6 +128,7 @@ try:
 
             new_tokens = outputs[0][len(inputs.input_ids[0]):]
             response = _llm_tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+            print(f"[LLM] Call successful")
             return _extract_json_response(response)
         except Exception as e:
             print(f"[LLM LOCAL ERROR] {e}")

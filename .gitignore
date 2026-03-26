@@ -11,3 +11,7 @@ __pycache__/
 # IDE
 .vscode/
 
+code/__pycache__/options.cpython-311.pyc
+code/data/__pycache__/feed_data.cpython-311.pyc
+code/model/__pycache__/agent.cpython-311.pyc
+code/model/__pycache__/environment.cpython-311.pyc

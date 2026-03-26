@@ -101,7 +101,12 @@ class Trainer(object):
     def __init__(self, params, tensorboard_dir=None):
         for key, val in params.items(): setattr(self, key, val); 
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        elif torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+        else:
+            self.device = torch.device("cpu")
         logger.info(f"Using device: {self.device}")
 
         self.agent = Agent(params)

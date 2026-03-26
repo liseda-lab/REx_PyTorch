@@ -14,7 +14,12 @@ class Agent(nn.Module):
 
     def __init__(self, params):
         super().__init__()
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        elif torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+        else:
+            self.device = torch.device("cpu")
         
         self.prevent_cycles =params['prevent_cycles'] #to avoid cycles in the graph
         self.guiding_ic=params['agent_IC_guiding']

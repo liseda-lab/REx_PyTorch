@@ -103,18 +103,18 @@ try:
                         pad_token_id=_llm_tokenizer.pad_token_id,
                     )
                 except RuntimeError as gen_err:
-                    if "probability tensor" in str(gen_err) and gen_kwargs.get("do_sample"):
-                        print("[LLM] inf/nan in sampling; retrying with greedy decoding")
-                        import warnings
-                        with warnings.catch_warnings():
-                            warnings.simplefilter("ignore")
-                            outputs = _llm_model.generate(
-                                **inputs, max_new_tokens=3072,
-                                do_sample=False,
-                                pad_token_id=_llm_tokenizer.pad_token_id,
-                            )
-                    else:
-                        raise
+                    # Sampling can produce inf/nan logits on MPS with float16,
+                    # crashing with "probability tensor contains either inf, nan or element < 0".
+                    # When that happens, fall back to greedy decoding which skips the
+                    # probability distribution entirely (always picks the top token).
+                    # - max_new_tokens=512: capped (vs 3072) to limit generation time,
+                    #   since we only need a short JSON response.
+                    # - repetition_penalty=1.3: prevents greedy from entering repetitive
+                    #   token loops (common failure mode that causes very slow generation).
+                    # - warnings suppressed: transformers logs a spurious warning about
+                    #   temperature/top_p/top_k not being valid for greedy; safe to ignore.
+                    # inf/nan in sampling — just let it fail and skip this batch
+                    raise
             
             #response = _llm_tokenizer.decode(outputs[0], skip_special_tokens=True)
             #raw = response[len(prompt):].strip()

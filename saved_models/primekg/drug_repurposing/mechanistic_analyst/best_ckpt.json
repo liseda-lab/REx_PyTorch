@@ -1,0 +1,6 @@
+{
+  "best_step": 120,
+  "threshold": 0.65,
+  "timestamp": 1775143250.8087785,
+  "model_path": "saved_models/primekg/drug_repurposing/mechanistic_analyst/model.ckpt"
+}

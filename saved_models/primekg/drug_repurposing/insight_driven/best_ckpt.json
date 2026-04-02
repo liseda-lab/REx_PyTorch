@@ -1,0 +1,6 @@
+{
+  "best_step": 70,
+  "threshold": 0.55,
+  "timestamp": 1775143087.522968,
+  "model_path": "saved_models/primekg/drug_repurposing/insight_driven/model.ckpt"
+}

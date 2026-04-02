@@ -1,0 +1,88 @@
+Score for iteration 10
+Hits@1:  0.0373
+Hits@3:  0.0682
+Hits@5:  0.0788
+Hits@10:  0.0969
+Hits@20:  0.1203
+MRR:  0.0607
+
+Score for iteration 20
+Hits@1:  0.0543
+Hits@3:  0.1001
+Hits@5:  0.1140
+Hits@10:  0.1438
+Hits@20:  0.1885
+MRR:  0.0878
+
+Score for iteration 30
+Hits@1:  0.0511
+Hits@3:  0.0990
+Hits@5:  0.1140
+Hits@10:  0.1683
+Hits@20:  0.2130
+MRR:  0.0890
+
+Score for iteration 40
+Hits@1:  0.1193
+Hits@3:  0.2247
+Hits@5:  0.2748
+Hits@10:  0.3674
+Hits@20:  0.4505
+MRR:  0.2021
+
+Score for iteration 50
+Hits@1:  0.2204
+Hits@3:  0.3823
+Hits@5:  0.4494
+Hits@10:  0.5346
+Hits@20:  0.5985
+MRR:  0.3267
+
+Score for iteration 60
+Hits@1:  0.2577
+Hits@3:  0.3930
+Hits@5:  0.4622
+Hits@10:  0.5165
+Hits@20:  0.5847
+MRR:  0.3472
+
+Score for iteration 70
+Hits@1:  0.2865
+Hits@3:  0.4089
+Hits@5:  0.4611
+Hits@10:  0.5059
+Hits@20:  0.5698
+MRR:  0.3649
+
+Score for iteration 80
+Hits@1:  0.2662
+Hits@3:  0.3855
+Hits@5:  0.4302
+Hits@10:  0.4867
+Hits@20:  0.5293
+MRR:  0.3413
+
+Score for iteration 90
+Hits@1:  0.2311
+Hits@3:  0.3557
+Hits@5:  0.4068
+Hits@10:  0.4558
+Hits@20:  0.5080
+MRR:  0.3111
+
+Score for iteration 100
+Hits@1:  0.2343
+Hits@3:  0.3621
+Hits@5:  0.4068
+Hits@10:  0.4643
+Hits@20:  0.5101
+MRR:  0.3103
+
+Test (beam) scores with best model from output/primekg/drug_repurposing/insight_driven//02-04_16:13:57/model/
+Hits@1:  0.3003
+Hits@3:  0.4388
+Hits@5:  0.4920
+Hits@10:  0.5485
+Hits@20:  0.5921
+MRR:  0.3891
+

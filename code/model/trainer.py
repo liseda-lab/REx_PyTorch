@@ -1062,46 +1062,47 @@ class Trainer(object):
             self.log_results(final_rewards)
 
         # Build output JSON in new pairs/paths format (matches teste_output.json)
-        # Use unique ordered pairs (preserve test order, deduplicate)
-        seen_pairs = set()
-        unique_tested_pairs = []
-        for pid in all_tested_pairs:
-            if pid not in seen_pairs:
-                seen_pairs.add(pid)
-                unique_tested_pairs.append(pid)
-
-        pairs_list = []
-        path_counter = 1
-        for pair_id in unique_tested_pairs:
-            if pair_id in correct_groups:
-                path_entries = correct_groups[pair_id]
-                # Sort by final_score descending
-                path_entries.sort(key=lambda x: x["score"]["final_score"], reverse=True)
-                # Assign sequential path IDs
-                for entry in path_entries:
-                    entry["id"] = f"path_{path_counter}"
-                    path_counter += 1
-                pairs_list.append({
-                    "id": pair_id,
-                    "paths": path_entries,
-                })
-            else:
-                # No correct paths found for this pair
-                pairs_list.append({
-                    "id": pair_id,
-                    "warning": "No valid explanation paths found for this pair. "
-                               "The model could not reach the target entity.",
-                    "paths": [],
-                })
-
-        output = {"pairs": pairs_list}
-        json_path = self.path_logger_file_ + ".json"
-        with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(output, f, ensure_ascii=False, indent=2)
-        logger.info(f"[SAVED] Grouped JSON → {json_path} "
-                     f"({sum(1 for p in pairs_list if p['paths'])} with paths, "
-                     f"{sum(1 for p in pairs_list if not p['paths'])} with warnings)")
-
+        if print_paths:
+            # Use unique ordered pairs (preserve test order, deduplicate)
+            seen_pairs = set()
+            unique_tested_pairs = []
+            for pid in all_tested_pairs:
+                if pid not in seen_pairs:
+                    seen_pairs.add(pid)
+                    unique_tested_pairs.append(pid)
+    
+            pairs_list = []
+            path_counter = 1
+            for pair_id in unique_tested_pairs:
+                if pair_id in correct_groups:
+                    path_entries = correct_groups[pair_id]
+                    # Sort by final_score descending
+                    path_entries.sort(key=lambda x: x["score"]["final_score"], reverse=True)
+                    # Assign sequential path IDs
+                    for entry in path_entries:
+                        entry["id"] = f"path_{path_counter}"
+                        path_counter += 1
+                    pairs_list.append({
+                        "id": pair_id,
+                        "paths": path_entries,
+                    })
+                else:
+                    # No correct paths found for this pair
+                    pairs_list.append({
+                        "id": pair_id,
+                        "warning": "No valid explanation paths found for this pair. "
+                                   "The model could not reach the target entity.",
+                        "paths": [],
+                    })
+    
+            output = {"pairs": pairs_list}
+            json_path = self.path_logger_file_ + ".json"
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(output, f, ensure_ascii=False, indent=2)
+            logger.info(f"[SAVED] Grouped JSON → {json_path} "
+                         f"({sum(1 for p in pairs_list if p['paths'])} with paths, "
+                         f"{sum(1 for p in pairs_list if not p['paths'])} with warnings)")
+    
 
         return final_rewards["MRR"]
 

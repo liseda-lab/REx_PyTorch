@@ -70,8 +70,7 @@ Hits@10:  0.4750
 Hits@20:  0.5154
 MRR:  0.3009
 
-Test (beam) scores with best model from output/primekg/drug_repurposing/neutral_evaluator/02-04_18:19:20/model/
-Hits@1:  0.2662
+Test (beam) scores with best model
 Hits@3:  0.4292
 Hits@5:  0.4760
 Hits@10:  0.5410

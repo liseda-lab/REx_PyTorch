@@ -1,6 +1,6 @@
 {
-  "best_step": 20,
+  "best_step": 30,
   "threshold": 0.5,
-  "timestamp": 1775150770.5272007,
+  "timestamp": 1775154490.2679775,
   "model_path": "saved_models/oregano/drug_repurposing/neutral_evaluator/model.ckpt"
 }

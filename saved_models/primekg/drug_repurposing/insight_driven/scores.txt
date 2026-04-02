@@ -78,8 +78,7 @@ Hits@10:  0.4643
 Hits@20:  0.5101
 MRR:  0.3103
 
-Test (beam) scores with best model from output/primekg/drug_repurposing/insight_driven//02-04_16:13:57/model/
-Hits@1:  0.3003
+Test (beam) scores with best model 
 Hits@3:  0.4388
 Hits@5:  0.4920
 Hits@10:  0.5485

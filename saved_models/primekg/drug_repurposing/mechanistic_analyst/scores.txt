@@ -118,7 +118,7 @@ Hits@10:  0.4036
 Hits@20:  0.4750
 MRR:  0.2853
 
-Test (beam) scores with best model from output/primekg/drug_repurposing/mechanistic_analyst//02-04_16:14:26/model/
+Test (beam) scores with best model
 Hits@1:  0.2694
 Hits@3:  0.3642
 Hits@5:  0.4143

@@ -62,7 +62,7 @@ Hits@10:  0.4297
 Hits@20:  0.5222
 MRR:  0.2087
 
-Test (beam) scores with best model from output/oregano/drug_target/mechanistic_analyst//02-04_16:12:44/model/
+Test (beam) scores with best model
 Hits@1:  0.1763
 Hits@3:  0.3169
 Hits@5:  0.3904

@@ -1,48 +1,56 @@
 Score for iteration 10
 Hits@1:  0.1724
 Hits@3:  0.1724
-Hits@5:  0.2069
-Hits@10:  0.2069
+Hits@5:  0.1724
+Hits@10:  0.2759
 Hits@20:  0.2759
-MRR:  0.1941
+MRR:  0.1893
 
 Score for iteration 20
-Hits@1:  0.2069
-Hits@3:  0.2069
+Hits@1:  0.1724
+Hits@3:  0.1724
 Hits@5:  0.2069
-Hits@10:  0.2069
-Hits@20:  0.2759
-MRR:  0.2218
+Hits@10:  0.3103
+Hits@20:  0.3103
+MRR:  0.2032
 
 Score for iteration 30
-Hits@1:  0.1379
-Hits@3:  0.2069
-Hits@5:  0.2414
-Hits@10:  0.3448
-Hits@20:  0.4828
-MRR:  0.2100
+Hits@1:  0.2069
+Hits@3:  0.2759
+Hits@5:  0.2759
+Hits@10:  0.3103
+Hits@20:  0.5172
+MRR:  0.2535
 
 Score for iteration 40
-Hits@1:  0.1034
-Hits@3:  0.2069
-Hits@5:  0.2759
-Hits@10:  0.4483
-Hits@20:  0.5862
-MRR:  0.2010
+Hits@1:  0.0690
+Hits@3:  0.2414
+Hits@5:  0.3448
+Hits@10:  0.4138
+Hits@20:  0.5517
+MRR:  0.1836
 
 Score for iteration 50
-Hits@1:  0.1379
-Hits@3:  0.2414
+Hits@1:  0.1724
+Hits@3:  0.2069
 Hits@5:  0.3103
 Hits@10:  0.3793
 Hits@20:  0.5862
-MRR:  0.2188
+MRR:  0.2317
 
-Test (beam) scores with best model from output/oregano/drug_repurposing/neutral_evaluator/02-04_18:25:29/model/
-Hits@1:  0.1429
-Hits@3:  0.1905
-Hits@5:  0.2222
-Hits@10:  0.2857
-Hits@20:  0.3810
-MRR:  0.1876
+Score for iteration 60
+Hits@1:  0.1724
+Hits@3:  0.2414
+Hits@5:  0.3448
+Hits@10:  0.4483
+Hits@20:  0.4828
+MRR:  0.2471
+
+Test (beam) scores with best model
+Hits@1:  0.1746
+Hits@3:  0.2540
+Hits@5:  0.2698
+Hits@10:  0.3968
+Hits@20:  0.4921
+MRR:  0.2418
 

@@ -1,0 +1,72 @@
+Score for iteration 10
+Hits@1:  0.1724
+Hits@3:  0.1724
+Hits@5:  0.1724
+Hits@10:  0.2759
+Hits@20:  0.3103
+MRR:  0.1946
+
+Score for iteration 20
+Hits@1:  0.1724
+Hits@3:  0.1724
+Hits@5:  0.2414
+Hits@10:  0.3448
+Hits@20:  0.3448
+MRR:  0.2118
+
+Score for iteration 30
+Hits@1:  0.2069
+Hits@3:  0.2414
+Hits@5:  0.2759
+Hits@10:  0.2759
+Hits@20:  0.5172
+MRR:  0.2478
+
+Score for iteration 40
+Hits@1:  0.1379
+Hits@3:  0.3103
+Hits@5:  0.3103
+Hits@10:  0.4138
+Hits@20:  0.5862
+MRR:  0.2446
+
+Score for iteration 50
+Hits@1:  0.2069
+Hits@3:  0.2759
+Hits@5:  0.3793
+Hits@10:  0.4483
+Hits@20:  0.5862
+MRR:  0.2831
+
+Score for iteration 60
+Hits@1:  0.1724
+Hits@3:  0.2069
+Hits@5:  0.2759
+Hits@10:  0.4483
+Hits@20:  0.5172
+MRR:  0.2361
+
+Score for iteration 70
+Hits@1:  0.2069
+Hits@3:  0.2069
+Hits@5:  0.3103
+Hits@10:  0.3793
+Hits@20:  0.4138
+MRR:  0.2494
+
+Score for iteration 80
+Hits@1:  0.2414
+Hits@3:  0.2414
+Hits@5:  0.3448
+Hits@10:  0.3793
+Hits@20:  0.4483
+MRR:  0.2799
+
+Test (beam) scores with best model from output/oregano/drug_repurposing/insight_driven//02-04_16:05:12/model/
+Hits@1:  0.0794
+Hits@3:  0.2222
+Hits@5:  0.3651
+Hits@10:  0.4921
+Hits@20:  0.5079
+MRR:  0.1933
+

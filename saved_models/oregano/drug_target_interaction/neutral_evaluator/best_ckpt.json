@@ -1,6 +1,0 @@
-{
-  "best_step": 50,
-  "threshold": 0.5,
-  "timestamp": 1774532574.716918,
-  "model_path": "saved_models/oregano/drug_target_interaction/neutral_evaluator/model.ckpt"
-}

@@ -1,0 +1,6 @@
+{
+  "best_step": 40,
+  "threshold": 0.5,
+  "timestamp": 1775143942.1650841,
+  "model_path": "saved_models/oregano/drug_target_interaction/insight_driven/model.ckpt"
+}

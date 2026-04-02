@@ -1,0 +1,96 @@
+Score for iteration 10
+Hits@1:  0.1379
+Hits@3:  0.1724
+Hits@5:  0.1724
+Hits@10:  0.2069
+Hits@20:  0.2759
+MRR:  0.1688
+
+Score for iteration 20
+Hits@1:  0.1724
+Hits@3:  0.1724
+Hits@5:  0.1724
+Hits@10:  0.2069
+Hits@20:  0.2759
+MRR:  0.1891
+
+Score for iteration 30
+Hits@1:  0.1034
+Hits@3:  0.2414
+Hits@5:  0.3103
+Hits@10:  0.3103
+Hits@20:  0.5517
+MRR:  0.1954
+
+Score for iteration 40
+Hits@1:  0.1034
+Hits@3:  0.2414
+Hits@5:  0.3103
+Hits@10:  0.3448
+Hits@20:  0.4828
+MRR:  0.2036
+
+Score for iteration 50
+Hits@1:  0.1724
+Hits@3:  0.2414
+Hits@5:  0.3103
+Hits@10:  0.4483
+Hits@20:  0.5517
+MRR:  0.2467
+
+Score for iteration 60
+Hits@1:  0.2069
+Hits@3:  0.2069
+Hits@5:  0.2759
+Hits@10:  0.3793
+Hits@20:  0.5172
+MRR:  0.2501
+
+Score for iteration 70
+Hits@1:  0.2069
+Hits@3:  0.2414
+Hits@5:  0.2414
+Hits@10:  0.4138
+Hits@20:  0.4483
+MRR:  0.2521
+
+Score for iteration 80
+Hits@1:  0.2069
+Hits@3:  0.2414
+Hits@5:  0.2759
+Hits@10:  0.4138
+Hits@20:  0.4483
+MRR:  0.2542
+
+Score for iteration 90
+Hits@1:  0.1724
+Hits@3:  0.2069
+Hits@5:  0.3103
+Hits@10:  0.3793
+Hits@20:  0.4138
+MRR:  0.2203
+
+Score for iteration 100
+Hits@1:  0.1724
+Hits@3:  0.2759
+Hits@5:  0.3103
+Hits@10:  0.3793
+Hits@20:  0.4828
+MRR:  0.2397
+
+Score for iteration 110
+Hits@1:  0.1379
+Hits@3:  0.2069
+Hits@5:  0.2759
+Hits@10:  0.3793
+Hits@20:  0.4483
+MRR:  0.2061
+
+Test (beam) scores with best model from output/oregano/drug_repurposing/neutral_evaluator/28-03_13:27:00/model/
+Hits@1:  0.2698
+Hits@3:  0.3651
+Hits@5:  0.4444
+Hits@10:  0.5238
+Hits@20:  0.6667
+MRR:  0.3439
+

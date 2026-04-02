@@ -1,0 +1,80 @@
+Score for iteration 10
+Hits@1:  0.0193
+Hits@3:  0.0469
+Hits@5:  0.0588
+Hits@10:  0.0778
+Hits@20:  0.1136
+MRR:  0.0413
+
+Score for iteration 20
+Hits@1:  0.0226
+Hits@3:  0.0539
+Hits@5:  0.0687
+Hits@10:  0.0992
+Hits@20:  0.1399
+MRR:  0.0488
+
+Score for iteration 30
+Hits@1:  0.0374
+Hits@3:  0.0794
+Hits@5:  0.1082
+Hits@10:  0.1519
+Hits@20:  0.2008
+MRR:  0.0741
+
+Score for iteration 40
+Hits@1:  0.0671
+Hits@3:  0.1465
+Hits@5:  0.2074
+Hits@10:  0.3058
+Hits@20:  0.3877
+MRR:  0.1379
+
+Score for iteration 50
+Hits@1:  0.0840
+Hits@3:  0.1905
+Hits@5:  0.2514
+Hits@10:  0.3383
+Hits@20:  0.4317
+MRR:  0.1655
+
+Score for iteration 60
+Hits@1:  0.0856
+Hits@3:  0.1971
+Hits@5:  0.2597
+Hits@10:  0.3453
+Hits@20:  0.4457
+MRR:  0.1696
+
+Score for iteration 70
+Hits@1:  0.0852
+Hits@3:  0.1794
+Hits@5:  0.2457
+Hits@10:  0.3317
+Hits@20:  0.4255
+MRR:  0.1631
+
+Score for iteration 80
+Hits@1:  0.0733
+Hits@3:  0.1617
+Hits@5:  0.2107
+Hits@10:  0.2889
+Hits@20:  0.3642
+MRR:  0.1419
+
+Score for iteration 90
+Hits@1:  0.0782
+Hits@3:  0.1560
+Hits@5:  0.2037
+Hits@10:  0.2774
+Hits@20:  0.3547
+MRR:  0.1399
+
+Test (beam) scores with best model
+Hits@1:  0.0994
+Hits@3:  0.2233
+Hits@5:  0.2913
+Hits@10:  0.3910
+Hits@20:  0.4984
+MRR:  0.1930
+

@@ -1,0 +1,6 @@
+{
+  "best_step": 60,
+  "threshold": 0.55,
+  "timestamp": 1774554608.2362828,
+  "model_path": "output/primekg/drug_repurposing/neutral_evaluator/26-03_19:31:41/model/model.ckpt"
+}

@@ -1,6 +1,8 @@
 # REx_PyTorch
 
-This is the pytorch implementation for the REx [paper](https://www.ijcai.org/proceedings/2025/0515.pdf). The original implementation of REx in tensorflow can be found [here](https://github.com/liseda-lab/REx). This REx implementation already includes a new approach called Adaptive REx with an arxiv version of the paper [here](https://arxiv.org/abs/2603.21846), but to use the original REX, just choose the `neutral_evaluator` files inside configs. More details will be here soon.
+This repository includes:
+-  The pytorch implementation for the REx [paper](https://www.ijcai.org/proceedings/2025/0515.pdf). The original implementation of REx in tensorflow can be found [here](https://github.com/liseda-lab/REx).
+-   This implementation already includes a new approach called Adaptive REx with an arxiv version of the paper [here](https://arxiv.org/abs/2603.21846), but to use the original REX, just choose the `neutral_evaluator` files inside configs. 
 
 ## Guide to run the system
 

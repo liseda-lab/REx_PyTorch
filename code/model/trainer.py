@@ -832,6 +832,17 @@ class Trainer(object):
             ce = episode.state['current_entities'].reshape((temp_batch_size, self.test_rollouts))
             se = episode.start_entities.reshape((temp_batch_size, self.test_rollouts))
 
+            # Pre-compute trimmed paths once per batch (NOT inside the per-example loop)
+            if print_paths:
+                trimmed = trim_and_rank_batch(
+                    entity_traj   = self.entity_trajectory,
+                    relation_traj = self.relation_trajectory,
+                    log_probs     = self.log_probs,
+                    end_entities  = episode.end_entities,
+                    batch_size    = temp_batch_size,
+                    K             = self.test_rollouts
+                )
+
             # Compute HITS@k
             for b in range(temp_batch_size):
                 answer_pos = None
@@ -885,14 +896,6 @@ class Trainer(object):
                     all_tested_pairs.append(f"{start_e} - {end_e}")
                     paths[str(qr)].append(str(start_e) + "\t" + str(end_e) + "\n")
                     paths[str(qr)].append("Reward:" + str(1 if answer_pos != None and answer_pos < 10 else 0) + "\n")
-                    trimmed = trim_and_rank_batch(
-                    entity_traj   = self.entity_trajectory,
-                    relation_traj = self.relation_trajectory,
-                    log_probs     = self.log_probs,
-                    end_entities  = episode.end_entities,
-                    batch_size    = temp_batch_size,
-                    K              = self.test_rollouts
-                )
                     # for p in trimmed[b]:
                     #     # use the rollout index to recover reward & beam-score
                     #     r = p['rollout_idx']

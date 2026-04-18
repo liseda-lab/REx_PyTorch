@@ -172,6 +172,10 @@ class Trainer(object):
 
         ## NEW: try to load ontology DAGs for LCA computation
         self._lca_ready = False
+        self._lca_pair_cache = {}  # (dag_name, frozenset({n1,n2})) -> URIRef or None
+        if getattr(self, 'skip_lca', False):
+            logger.info("[LCA] Skipped by --skip_lca flag")
+            return
         import time as _time
         import socket as _socket
         _LCA_MAX_ATTEMPTS = 3
@@ -244,22 +248,38 @@ class Trainer(object):
             from rdflib import URIRef
 
             nodes = [URIRef(f"http://onto/{eid}") for eid in entity_ids]
-            # Verify nodes actually exist in at least one DAG before expensive LCA
-            if not any(n in self._dag_ncit or n in self._dag_chebi for n in nodes):
+            # Pre-filter once per DAG: only keep nodes actually present in it
+            nodes_in_ncit  = [n for n in nodes if n in self._dag_ncit]
+            nodes_in_chebi = [n for n in nodes if n in self._dag_chebi]
+            if not nodes_in_ncit and not nodes_in_chebi:
                 return None
             lcas = defaultdict(set)
 
-            for dag, dag_nodes in [
-                (self._dag_ncit,  [n for n in nodes if n in self._dag_ncit]),
-                (self._dag_chebi, [n for n in nodes if n in self._dag_chebi]),
-            ]:
-                pairs = list(combinations(dag_nodes, 2))
-                if not pairs:
+            for dag_name, dag, dag_nodes in (
+                ("ncit",  self._dag_ncit,  nodes_in_ncit),
+                ("chebi", self._dag_chebi, nodes_in_chebi),
+            ):
+                dag_pairs = list(combinations(dag_nodes, 2))
+                if not dag_pairs:
                     continue
-                raw = dict(nx.all_pairs_lowest_common_ancestor(dag, pairs))
-                for pair, anc in raw.items():
-                    if anc and str(anc) not in self._too_general:
-                        lcas[pair].add(anc)
+
+                uncached_pairs = []
+                for pair in dag_pairs:
+                    cache_key = (dag_name, frozenset(pair))
+                    if cache_key in self._lca_pair_cache:
+                        anc = self._lca_pair_cache[cache_key]
+                        if anc and str(anc) not in self._too_general:
+                            lcas[pair].add(anc)
+                    else:
+                        uncached_pairs.append(pair)
+
+                if uncached_pairs:
+                    raw = dict(nx.all_pairs_lowest_common_ancestor(dag, uncached_pairs))
+                    for pair in uncached_pairs:
+                        anc = raw.get(pair)
+                        self._lca_pair_cache[(dag_name, frozenset(pair))] = anc
+                        if anc and str(anc) not in self._too_general:
+                            lcas[pair].add(anc)
 
             if not lcas:
                 return None
@@ -280,6 +300,96 @@ class Trainer(object):
         except Exception as e:
             logger.warning(f"[LCA] Error computing LCAs: {e}")
             return None
+
+    def _annotate_lcas_batch(self, correct_groups):
+        """
+        Annotate every entry in `correct_groups` with `lowest_common_ancestors`
+        using ONE LCA query per DAG over all unique (n1, n2) pairs collected
+        across the whole test set (instead of one query per path).
+
+        Mutates entries in place and strips the internal `_ent_ids` field so
+        the dict is ready for JSON serialization.
+        """
+        if not correct_groups:
+            return
+
+        # Fast path: LCA disabled — just strip the internal field.
+        if not self._lca_ready:
+            for entries in correct_groups.values():
+                for entry in entries:
+                    entry.pop("_ent_ids", None)
+            return
+
+        total_paths = sum(len(v) for v in correct_groups.values())
+        logger.info(f"[LCA] Running batch annotation on {total_paths} correct paths...")
+
+        try:
+            import networkx as nx
+            from rdflib import URIRef
+
+            # 1) Collect all unique pairs per DAG across the whole test set.
+            pairs_ncit  = set()
+            pairs_chebi = set()
+            for entries in correct_groups.values():
+                for entry in entries:
+                    ent_ids = entry.get("_ent_ids")
+                    if not ent_ids:
+                        continue
+                    nodes = [URIRef(f"http://onto/{eid}") for eid in ent_ids]
+                    for n1, n2 in combinations(nodes, 2):
+                        if n1 in self._dag_ncit and n2 in self._dag_ncit:
+                            pairs_ncit.add((n1, n2))
+                        if n1 in self._dag_chebi and n2 in self._dag_chebi:
+                            pairs_chebi.add((n1, n2))
+
+            # 2) Single LCA query per DAG over all unique pairs.
+            lca_lookup = {}  # (dag_name, (n1, n2)) -> ancestor URIRef
+            for dag_name, dag, pair_set in (
+                ("ncit",  self._dag_ncit,  pairs_ncit),
+                ("chebi", self._dag_chebi, pairs_chebi),
+            ):
+                if not pair_set:
+                    continue
+                pair_list = list(pair_set)
+                logger.info(f"[LCA] Computing LCAs on {dag_name} DAG for {len(pair_list)} unique pairs")
+                raw = dict(nx.all_pairs_lowest_common_ancestor(dag, pair_list))
+                for pair, anc in raw.items():
+                    lca_lookup[(dag_name, pair)] = anc
+
+            # 3) Fill in per-entry LCA from the lookup table, strip _ent_ids.
+            for entries in correct_groups.values():
+                for entry in entries:
+                    ent_ids = entry.pop("_ent_ids", None)
+                    if not ent_ids:
+                        continue
+                    nodes = [URIRef(f"http://onto/{eid}") for eid in ent_ids]
+                    entry_lcas = defaultdict(set)
+                    for n1, n2 in combinations(nodes, 2):
+                        for dag_name, dag in (("ncit", self._dag_ncit), ("chebi", self._dag_chebi)):
+                            if n1 in dag and n2 in dag:
+                                anc = lca_lookup.get((dag_name, (n1, n2)))
+                                if anc and str(anc) not in self._too_general:
+                                    entry_lcas[(n1, n2)].add(anc)
+                    if entry_lcas:
+                        result = {}
+                        for (n1, n2), anc_set in entry_lcas.items():
+                            eid1 = str(n1).replace("http://onto/", "")
+                            eid2 = str(n2).replace("http://onto/", "")
+                            lbl1 = self._node_labels.get(eid1, eid1)
+                            lbl2 = self._node_labels.get(eid2, eid2)
+                            key = f"{lbl1},{lbl2}"
+                            result[key] = [
+                                self._onto_labels.get(str(anc), str(anc)).title()
+                                for anc in anc_set
+                            ]
+                        entry["lowest_common_ancestors"] = result
+            logger.info("[LCA] Batch annotation complete")
+        except Exception as e:
+            logger.warning(f"[LCA] Error in batch annotation: {e}")
+            # Ensure internal field is stripped even on failure.
+            for entries in correct_groups.values():
+                for entry in entries:
+                    entry.pop("_ent_ids", None)
 
     def _keep_correct_entry(self, groups, episode, b, r, p, rewards):
         """
@@ -349,10 +459,11 @@ class Trainer(object):
             "edges": edges,
         }
 
-        # Lowest common ancestors (if ontology DAGs are available)
-        lcas = self._compute_lcas_for_path(ent_ids)
-        if lcas:
-            entry["lowest_common_ancestors"] = lcas
+        # Stash entity IDs for batch LCA annotation after the test loop.
+        # (Actual LCA computation happens in _annotate_lcas_batch to avoid a
+        # full DAG walk per path.)
+        if self._lca_ready:
+            entry["_ent_ids"] = ent_ids
 
         groups.setdefault(pair_id, []).append(entry)
 
@@ -1066,6 +1177,10 @@ class Trainer(object):
 
         # Build output JSON in new pairs/paths format (matches teste_output.json)
         if print_paths:
+            # Annotate correct paths with LCAs (one query per DAG across the
+            # full test set). No-op when --skip_lca or DAGs unavailable.
+            self._annotate_lcas_batch(correct_groups)
+
             # Use unique ordered pairs (preserve test order, deduplicate)
             seen_pairs = set()
             unique_tested_pairs = []

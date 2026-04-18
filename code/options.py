@@ -59,6 +59,8 @@ def read_options():
                         help="HuggingFace model name for local LLM (e.g. Qwen/Qwen3-4B for lightweight testing)")
     parser.add_argument("--viz_mode", default=0, type=int,
                         help="UI visualization mode: only produce the JSON output (1 = on, 0 = off)")
+    parser.add_argument("--skip_lca", default=0, type=int,
+                        help="Skip LCA (lowest common ancestor) computation at test time for speed (1 = skip, 0 = compute)")
 
     
     try:
@@ -78,6 +80,7 @@ def read_options():
     parsed['agentic_ai_enabled'] = (parsed['agentic_ai_enabled'] == 1) # NEW
     parsed['llm_api'] = (parsed['llm_api'] == 1)
     parsed['viz_mode'] = (parsed['viz_mode'] == 1)
+    parsed['skip_lca'] = (parsed['skip_lca'] == 1)
 
     # In viz_mode, force lightweight local LLM
     if parsed['viz_mode']:

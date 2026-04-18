@@ -16,7 +16,8 @@ cmd="python code/model/trainer.py --base_output_dir $base_output_dir \
     --load_model $load_model --total_iterations $total_iterations \
     --IC_reward ${IC_reward:-1} --early_stopping $early_stopping \
     --agentic_ai_enabled $agentic_ai_enabled  --persona_path $persona_path \
-    --viz_mode ${viz_mode:-0}"
+    --viz_mode ${viz_mode:-0} \
+    --skip_lca ${skip_lca:-0}"
 
 echo "Executing $cmd"
 

@@ -21,6 +21,6 @@ early_stopping=1
 IC_reward=1
 agentic_ai_enabled=1
 persona_path="personas/insight_driven.txt"
-load_model=0
+load_model=1
 model_load_dir="saved_models/hetionet/drug_target/insight_driven/best_ckpt.json"
 viz_mode=0

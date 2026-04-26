@@ -21,6 +21,6 @@ early_stopping=1
 IC_reward=1
 agentic_ai_enabled=1
 persona_path="personas/mechanistic_analyst.txt"
-load_model=0
+load_model=1
 model_load_dir="saved_models/primekg/drug_repurposing/mechanistic_analyst/best_ckpt.json"
 viz_mode=0

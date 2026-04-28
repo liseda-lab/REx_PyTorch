@@ -259,11 +259,10 @@ def configure_env_logger(path):
 COMPLETENESS_MAP = {1: 1.0, 2: 3.0, 3: 5.0, 4: 3.0, 5: 1.0}
 
 def threshold_for_step(step: int) -> float:
-    if step < 60:   return 0.50
-    elif step < 80: return 0.55
-    elif step < 120:return 0.60
-    elif step < 150:return 0.65
-    else:           return 0.70
+    if step < 60:    return 0.65
+    elif step < 80:  return 0.70
+    elif step < 100: return 0.75
+    else:            return 0.80
 
 
 class Episode(object):
@@ -397,6 +396,9 @@ class Episode(object):
         all_weights = np.full((T, B), 2.0, dtype=np.float32)
         all_rels = np.full((T, B), 2.0, dtype=np.float32)
 
+        fallback_hits = 0  # [DEBUG] count edges where (e1,e2) not found in array_store
+        edges_visited = 0  # [DEBUG] total edges actually examined (excludes post-stop padding)
+
         for b in range(B):
             for t in range(T):
                 e1 = int(self.visited_entities[b, t])
@@ -407,6 +409,7 @@ class Episode(object):
                 edge_wts = self.grapher.weights_store[e1]    # [max_actions]
 
                 match_idxs = np.where(neighbors[:, 0] == e2)[0]
+                edges_visited += 1
 
                 if len(match_idxs) > 0:
                     # Prefer non-self-loop (index > 0); disambiguate with
@@ -431,6 +434,7 @@ class Episode(object):
                     # Edge not in graph — fallback
                     all_weights[t, b] = 0.5
                     all_rels[t, b] = -1.0
+                    fallback_hits += 1
 
                 # If we reached the target entity, remaining steps are padding
                 if self.early_stopping and e2 == self.end_entities[b]:
@@ -445,6 +449,10 @@ class Episode(object):
         w[mask_2] = np.nan
         ic_mean = np.nanmean(w, axis=0)
         self.recomputed_ic_mean = np.nan_to_num(ic_mean, nan=0.0)
+
+        # [DEBUG] expose fallback stats for the reward logger
+        self._fallback_hits = fallback_hits
+        self._edges_visited = edges_visited
 
         self._path_recomputed = True
     ## END FIX IC DECISION
@@ -847,17 +855,44 @@ class Episode(object):
             return base
 
         threshold = threshold_for_step(training_step)
-        
+
         # Three tiers of paths
+        # Fidelity gate: base > 0 means the path reached the answer entity.
+        # Fidelity=0 paths (base <= 0) get NO reward.
         high_ic_idxs = np.where(base > threshold)[0].tolist()
-        medium_ic_idxs = np.where((base > 0.5) & (base <= threshold))[0].tolist() if threshold > 0.5 else []
-        low_ic_idxs = np.where((base > 0.3) & (base <= 0.5))[0].tolist()  # NEW tier
-        
+        medium_ic_idxs = np.where((base >= 0.5) & (base <= threshold))[0].tolist() if threshold >= 0.5 else []
+        low_ic_idxs = np.where((base > 0) & (base < 0.5))[0].tolist()
+
+        # [DEBUG] IC distribution: are paths clustering near 0.5 or genuinely spread out?
+        ic_eq_05 = int(np.sum(np.isclose(base, 0.5, atol=1e-6)))  # exact-0.5 count
+        bins = [0.0, 0.3, 0.5, 0.6, 0.7, 0.8, 1.0 + 1e-6]
+        hist, _ = np.histogram(base, bins=bins)
+        hist_str = " ".join(
+            f"[{bins[i]:.1f}-{bins[i+1]:.1f}):{int(hist[i])}" for i in range(len(hist))
+        )
+        fb = getattr(self, '_fallback_hits', None)
+        ev = getattr(self, '_edges_visited', None)
+        fb_pct = (100.0 * fb / ev) if (fb is not None and ev) else 0.0
+        fb_line = (
+            f"  [DEBUG] fallback_edges={fb}/{ev} ({fb_pct:.1f}%)"
+            if fb is not None else "  [DEBUG] fallback_edges=n/a"
+        )
+
+        n_high = len(high_ic_idxs)
+        n_med = len(medium_ic_idxs)
+        n_low = len(low_ic_idxs)
+        n_total = int(base.shape[0])
+        n_unrewarded = n_total - n_high - n_med - n_low
+
         lines = [
             f"[STEP {training_step}] Threshold={threshold:.2f}",
-            f"  High IC (>{threshold:.2f}): {len(high_ic_idxs)} paths for LLM",
-            f"  Medium IC (0.5-{threshold:.2f}): {len(medium_ic_idxs)} paths get 0.25",
-            f"  Low IC (0.3-0.5): {len(low_ic_idxs)} paths get 0.1",
+            f"  High IC (>{threshold:.2f}): {n_high} paths for LLM",
+            f"  Medium IC [0.5-{threshold:.2f}]: {n_med} paths get 0.25",
+            f"  Low IC (<0.5): {n_low} paths get 0.1",
+            f"  [DEBUG] routed: LLM={n_high} medium={n_med} low={n_low} "
+            f"unrewarded={n_unrewarded} total={n_total}",
+            f"  [DEBUG] IC hist {hist_str}  exact_0.5={ic_eq_05}/{n_total}",
+            fb_line,
         ]
         for s in lines:
             print(s)

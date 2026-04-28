@@ -258,6 +258,19 @@ def configure_env_logger(path):
 # Completeness is best at 3; triangular mapping back to a 1–5 scale
 COMPLETENESS_MAP = {1: 1.0, 2: 3.0, 3: 5.0, 4: 3.0, 5: 1.0}
 
+# Module-level LLM score cache. Keyed by (persona_hash, query_context, path).
+# At temperature=0 the LLM is deterministic, so cached scores are byte-identical
+# to what a re-call would produce. Persists across episodes within one process.
+_llm_score_cache = {}
+_persona_hash_cache = {}
+_llm_cache_stats = {"hits": 0, "misses": 0}
+
+def _persona_hash(text):
+    if text not in _persona_hash_cache:
+        import hashlib
+        _persona_hash_cache[text] = hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
+    return _persona_hash_cache[text]
+
 def threshold_for_step(step: int) -> float:
     if step < 60:    return 0.60
     elif step < 80:  return 0.65
@@ -392,53 +405,72 @@ class Episode(object):
             self._path_recomputed = True
             return
 
-        # Pre-allocate: sentinel 2.0 means padding (same convention as weight_history)
-        all_weights = np.full((T, B), 2.0, dtype=np.float32)
-        all_rels = np.full((T, B), 2.0, dtype=np.float32)
+        # Vectorized edge lookup over all (B*T) (src, dst) pairs at once.
+        # Output is identical to the previous nested-for-loop version; the only
+        # behavioral subtleties preserved are: (1) early-stop padding after the
+        # rollout reaches end_entity; (2) relation_history disambiguation for
+        # cells where multiple edges in the graph match the desired (src, dst).
+        array_store = self.grapher.array_store     # (N, max_a, 2)  [dst_id, rel_id]
+        weights_store = self.grapher.weights_store  # (N, max_a)
 
-        fallback_hits = 0  # [DEBUG] count edges where (e1,e2) not found in array_store
-        edges_visited = 0  # [DEBUG] total edges actually examined (excludes post-stop padding)
+        src_2d = self.visited_entities[:, :-1].astype(np.int64)  # (B, T)
+        dst_2d = self.visited_entities[:, 1:].astype(np.int64)   # (B, T)
+        src_flat = src_2d.ravel()
+        dst_flat = dst_2d.ravel()
+        n = src_flat.shape[0]
 
-        for b in range(B):
-            for t in range(T):
-                e1 = int(self.visited_entities[b, t])
-                e2 = int(self.visited_entities[b, t + 1])
+        nbrs = array_store[src_flat]   # (B*T, max_a, 2)
+        wts = weights_store[src_flat]  # (B*T, max_a)
+        nbr_dsts = nbrs[:, :, 0]
+        nbr_rels = nbrs[:, :, 1]
 
-                # Look up edge e1->e2 in the graph
-                neighbors = self.grapher.array_store[e1]    # [max_actions, 2]
-                edge_wts = self.grapher.weights_store[e1]    # [max_actions]
+        match_mask = (nbr_dsts == dst_flat[:, None])
+        has_match = match_mask.any(axis=1)
+        match_count = match_mask.sum(axis=1)
+        first_match_idx = match_mask.argmax(axis=1)
+        selected_idx = first_match_idx.copy()
 
-                match_idxs = np.where(neighbors[:, 0] == e2)[0]
-                edges_visited += 1
+        # Disambiguation: when multiple edges match, try to pick the one whose
+        # relation matches relation_history[t][b].
+        if (match_count > 1).any() and self.relation_history:
+            T_hist = min(T, len(self.relation_history))
+            rels_hint_2d = np.full((B, T), 2.0, dtype=np.float32)
+            for t in range(T_hist):
+                rels_hint_2d[:, t] = self.relation_history[t]
+            rels_hint_flat = rels_hint_2d.ravel()
+            rel_match = (nbr_rels == rels_hint_flat[:, None].astype(nbr_rels.dtype))
+            full_match = match_mask & rel_match
+            full_has = full_match.any(axis=1)
+            full_match_idx = full_match.argmax(axis=1)
+            use_hint = (match_count > 1) & full_has & (rels_hint_flat != 2.0)
+            selected_idx = np.where(use_hint, full_match_idx, selected_idx)
 
-                if len(match_idxs) > 0:
-                    # Prefer non-self-loop (index > 0); disambiguate with
-                    # relation_history hint when multiple edges exist
-                    idx = match_idxs[0]
-                    if len(match_idxs) > 1:
-                        # Try relation_history as hint (best-effort)
-                        if t < len(self.relation_history):
-                            rel_hint = self.relation_history[t][b]
-                            if rel_hint != 2.0:
-                                for mi in match_idxs:
-                                    if neighbors[mi, 1] == int(rel_hint):
-                                        idx = mi
-                                        break
-                        # Otherwise prefer first non-self-loop edge
-                        elif idx == 0 and len(match_idxs) > 1:
-                            idx = match_idxs[1]
+        arange = np.arange(n)
+        selected_wt = wts[arange, selected_idx].astype(np.float32)
+        selected_rel = nbr_rels[arange, selected_idx].astype(np.float32)
 
-                    all_weights[t, b] = edge_wts[idx]
-                    all_rels[t, b] = float(neighbors[idx, 1])
-                else:
-                    # Edge not in graph — fallback
-                    all_weights[t, b] = 0.5
-                    all_rels[t, b] = -1.0
-                    fallback_hits += 1
+        # Fallback when no neighbor matched dst
+        selected_wt = np.where(has_match, selected_wt, np.float32(0.5))
+        selected_rel = np.where(has_match, selected_rel, np.float32(-1.0))
 
-                # If we reached the target entity, remaining steps are padding
-                if self.early_stopping and e2 == self.end_entities[b]:
-                    break
+        all_weights_bt = selected_wt.reshape(B, T)
+        all_rels_bt = selected_rel.reshape(B, T)
+
+        # Early-stop padding: cells AFTER the first reach of end_entity → 2.0
+        if self.early_stopping:
+            reached = (dst_2d == self.end_entities[:B, None])  # (B, T)
+            cum_reached = np.cumsum(reached.astype(np.int32), axis=1)
+            was_reached_before = cum_reached > reached.astype(np.int32)
+            all_weights_bt = np.where(was_reached_before, np.float32(2.0), all_weights_bt)
+            all_rels_bt = np.where(was_reached_before, np.float32(2.0), all_rels_bt)
+            edges_visited = int((~was_reached_before).sum())
+            fallback_hits = int(((~has_match).reshape(B, T) & ~was_reached_before).sum())
+        else:
+            edges_visited = int(B * T)
+            fallback_hits = int((~has_match).sum())
+
+        all_weights = all_weights_bt.T.copy()  # (T, B)
+        all_rels = all_rels_bt.T.copy()        # (T, B)
 
         self.recomputed_ic_per_step = [all_weights[t] for t in range(T)]
         self.recomputed_rels_per_step = [all_rels[t] for t in range(T)]
@@ -448,7 +480,7 @@ class Episode(object):
         w = all_weights.copy()
         w[mask_2] = np.nan
         ic_mean = np.nanmean(w, axis=0)
-        self.recomputed_ic_mean = np.nan_to_num(ic_mean, nan=0.0)
+        self.recomputed_ic_mean = np.nan_to_num(ic_mean, nan=0.0).astype(np.float32)
 
         # [DEBUG] expose fallback stats for the reward logger
         self._fallback_hits = fallback_hits
@@ -693,18 +725,49 @@ class Episode(object):
 
         import time, random, json
 
+        def _build_cache_key(idx):
+            """Cache key includes persona + query context + path content.
+            Same path under same query+persona returns identical LLM score (temp=0)."""
+            ctx = (
+                int(self.start_entities[idx]),
+                int(self.end_entities[idx]),
+                int(self.query_relation[idx]),
+            )
+            visited = tuple(int(x) for x in self.visited_entities[idx])
+            rels = tuple(
+                int(self.recomputed_rels_per_step[t][idx])
+                for t in range(len(self.recomputed_rels_per_step))
+            )
+            return (_persona_hash(self.persona_text), ctx, visited, rels)
+
         def _score_batch(batch_idxs, start_num):
-            """One sync call with small retries + robust JSON extraction."""
-            paths_text = self._build_paths_text(keep_idxs=batch_idxs)
+            """One sync call with small retries + robust JSON extraction.
+            Skips paths whose (persona, query, path) key is already in _llm_score_cache."""
+            # ---- Cache lookup ----
+            keys = {idx: _build_cache_key(idx) for idx in batch_idxs}
+            cached = {idx: _llm_score_cache[keys[idx]]
+                      for idx in batch_idxs if keys[idx] in _llm_score_cache}
+            to_score = [idx for idx in batch_idxs if idx not in cached]
+
+            _llm_cache_stats["hits"] += len(cached)
+            _llm_cache_stats["misses"] += len(to_score)
+            if cached:
+                print(f"[CACHE] {len(cached)}/{len(batch_idxs)} paths from cache "
+                      f"(total hits={_llm_cache_stats['hits']}, misses={_llm_cache_stats['misses']})")
+
+            if not to_score:
+                return [cached[idx] for idx in batch_idxs]
+
+            paths_text = self._build_paths_text(keep_idxs=to_score)
 
             # # Debug: Check if paths_text looks correct
             # path_lines = [line for line in paths_text.split('\n') if line.startswith('Path ')]
-            # print(f"[DEBUG] Generated text has {len(path_lines)} path lines for {len(batch_idxs)} indices")
+            # print(f"[DEBUG] Generated text has {len(path_lines)} path lines for {len(to_score)} indices")
             n_lines = sum(1 for line in paths_text.splitlines() if line.startswith("Path "))
-            if n_lines != len(batch_idxs):
-                print(f"[WARN] Prompt contains {n_lines} Path-lines but batch size is {len(batch_idxs)}")
+            if n_lines != len(to_score):
+                print(f"[WARN] Prompt contains {n_lines} Path-lines but batch size is {len(to_score)}")
 
-            id_list = list(map(int, batch_idxs))
+            id_list = list(map(int, to_score))
 
             # Debug: show first path text sent to LLM (remove after confirming labels are correct)
             #first_path_line = next((l for l in paths_text.splitlines() if l.startswith("Path ")), "")
@@ -720,13 +783,13 @@ class Episode(object):
             2. Completeness (C): 1–5 where 3 is ideal. 1 = too simple, 5 = too complex. Reward paths that are sufficiently detailed without overload.
             3. Relevance (R): 1–5. Usefulness for understanding why the prediction matters and how it connects to the task.
 
-            Paths to evaluate ({len(batch_idxs)} total). Each line has an [id=...]:
+            Paths to evaluate ({len(to_score)} total). Each line has an [id=...]:
                 {paths_text}
 
-            Return ONLY valid JSON with an array of exactly {len(batch_idxs)} objects.
+            Return ONLY valid JSON with an array of exactly {len(to_score)} objects.
             Each object MUST be: {{"id": <int from {id_list}>, "validity": <int>, "completeness": <int>, "relevance": <int>}}.
             Use ONLY the ids from this set: {id_list}. Do not invent or omit ids. DOUBLE CHECK BEFORE RETURNING RESULTS.
-            Do NOT return any text outside the JSON array. Do not return thinking traces or internal monologue. The output MUST be a JSON array of objects with id, validity, completeness, and relevance scores as described above. 
+            Do NOT return any text outside the JSON array. Do not return thinking traces or internal monologue. The output MUST be a JSON array of objects with id, validity, completeness, and relevance scores as described above.
             """.strip()
 
 
@@ -795,32 +858,41 @@ class Episode(object):
                                 "relevance":    clamp1to5(item.get("relevance", 3)),
                             }
 
-                    # Now assemble output strictly in batch order, filling defaults when missing
-                    out, missing = [], 0
+                    # Now assemble output strictly in to_score order, filling defaults when missing
+                    new_scores, missing = [], 0
                     for pid in id_list:
                         if pid in by_id:
-                            out.append(by_id[pid])
+                            new_scores.append(by_id[pid])
                         else:
                             missing += 1
-                            out.append({"validity":3.0, "completeness":2.0, "relevance":3.0})
+                            new_scores.append({"validity":3.0, "completeness":2.0, "relevance":3.0})
 
                     if missing or len(by_id) != len(id_list):
                         print(f"[WARN] ID-mismatch: expected {len(id_list)}, got {len(by_id)}, "
                             f"filled defaults for {missing} ids")
                         print(f"[DEBUG] Prompt was:\n{prompt}\n")
                         print(f"[DEBUG] Raw response was:\n{raw}\n")
-                    return out
-                    
+
+                    # Cache the new scores (only successful, non-default ones)
+                    for to_idx, score in zip(to_score, new_scores):
+                        _llm_score_cache[keys[to_idx]] = score
+
+                    # Merge cached + new in original batch order
+                    score_by_idx = dict(zip(to_score, new_scores))
+                    return [cached[idx] if idx in cached else score_by_idx[idx]
+                            for idx in batch_idxs]
+
                 except Exception as e:
                     last_err = e
                     if attempt < MAX_RETRIES:
                         delay = SLEEP_BETWEEN * (1.25 ** (attempt - 1)) + random.uniform(0, 0.2)
                         time.sleep(delay)
-            
-            # Only reached if all retries failed
+
+            # Only reached if all retries failed: defaults for uncached, cache for cached
             print(f"[FAIL] Batch completely failed after {MAX_RETRIES} attempts: {last_err}")
-            return [{"validity": 3.0, "completeness": 2.0, "relevance": 3.0}
-                    for _ in batch_idxs]
+            default_score = {"validity": 3.0, "completeness": 2.0, "relevance": 3.0}
+            return [cached[idx] if idx in cached else default_score
+                    for idx in batch_idxs]
         
         # ---- group by example id so each prompt has a single (start,end) context ----
         groups = defaultdict(list)

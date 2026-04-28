@@ -932,9 +932,14 @@ class Trainer(object):
                     state['current_entities'])
 
             # Process final rewards from environment
-           # rewards = episode.get_reward_ic_based()  
-            rewards = episode.get_reward_agenticAI() # -- NEW 
-            #print(rewards)
+            #HITS@k/MRR only checks reward > 0 (i.e. fidelity).
+            # For validation tests (print_paths=False), the LLM-shaped scores in
+            # get_reward_agenticAI are computed but never used by the metric ranking.
+            # So we can skip the entire LLM call during validation
+            if print_paths:
+                rewards = episode.get_reward_agenticAI()
+            else:
+                rewards = episode.get_reward_ic_based()
             reward_reshape = rewards.reshape((temp_batch_size, self.test_rollouts))
             # reshape and sort on the *frozen* full‐log_probs
             self.log_probs = self.log_probs.reshape((temp_batch_size, self.test_rollouts))

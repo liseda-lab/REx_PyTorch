@@ -259,10 +259,10 @@ def configure_env_logger(path):
 COMPLETENESS_MAP = {1: 1.0, 2: 3.0, 3: 5.0, 4: 3.0, 5: 1.0}
 
 def threshold_for_step(step: int) -> float:
-    if step < 60:    return 0.65
-    elif step < 80:  return 0.70
-    elif step < 100: return 0.75
-    else:            return 0.80
+    if step < 60:    return 0.60
+    elif step < 80:  return 0.65
+    elif step < 100: return 0.70
+    else:            return 0.75
 
 
 class Episode(object):

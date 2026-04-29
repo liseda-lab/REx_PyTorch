@@ -261,7 +261,7 @@ COMPLETENESS_MAP = {1: 1.0, 2: 3.0, 3: 5.0, 4: 3.0, 5: 1.0}
 def threshold_for_step(step: int) -> float:
     if step < 60:   return 0.50
     elif step < 80: return 0.55
-    elif step < 120:return 0.60
+    elif step < 120:return 0.60 # added more thresholds just in case of more iterations then usual (normaly only goes to 100)
     elif step < 150:return 0.65
     else:           return 0.70
 

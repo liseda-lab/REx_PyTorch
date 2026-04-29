@@ -678,7 +678,7 @@ class Episode(object):
             return None
 
         # ---- knobs (tune without code changes) ----
-        BATCH_SIZE = int(os.getenv("AGENTIC_BATCH_SIZE", "20"))       # 20–40 recommended
+        BATCH_SIZE = int(os.getenv("AGENTIC_BATCH_SIZE", "50"))       # 20–40 recommended
         SLEEP_BETWEEN = float(os.getenv("AGENTIC_SLEEP_BETWEEN", "0.4"))  # 0.3–0.5s
         MAX_RETRIES = int(os.getenv("AGENTIC_MAX_RETRIES", "4"))
         # ------------------------------------------

@@ -18,24 +18,23 @@ import codecs
 from collections import defaultdict
 from itertools import combinations
 import gc
-import resource
+try:
+    import resource
+except ImportError:
+    resource = None
 import sys
 from code.model.baseline import ReactiveBaseline
 from scipy.special import logsumexp as lse
 import shutil
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
-#tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR) 
-
-#from torch.utils.tensorboard import SummaryWriter
 
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-#os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import numpy as np
 
-from code.model.environment import env, Episode, threshold_for_step # -- NEW 
+from code.model.environment import env, Episode, threshold_for_step
 
 
 def trim_and_rank_batch(entity_traj, relation_traj, log_probs, end_entities, batch_size, K):
@@ -110,11 +109,10 @@ class Trainer(object):
         logger.info(f"Using device: {self.device}")
 
         self.agent = Agent(params)
-        #print(f"[INIT] Agent created. load_model={params.get('load_model', False)}")
-        self.set_random_seed(self.seed) # set random seed for reproducibility
+        self.set_random_seed(self.seed)
         self.save_path = None
 
-        ## FIX TEST - only build environments that are needed
+        # Only build environments that are needed
         if not params.get('load_model', False):
             self.train_environment = env(params, 'train')
             self.dev_test_environment = env(params, 'dev')
@@ -129,31 +127,25 @@ class Trainer(object):
             self.rev_relation_vocab = self.test_test_environment.grapher.rev_relation_vocab
             self.rev_entity_vocab = self.test_test_environment.grapher.rev_entity_vocab
             self._relation_labels = self.test_test_environment.grapher.relation_labels
-        ## END FIX TEST
 
-        self.max_hits_at_10 = 0 # Track max hits at 10
+        self.max_hits_at_10 = 0
 
-        # NEW Add early stopping variables
-        self.best_metric = -1  # Track best MRR
+        # Early stopping: stop if no MRR improvement for `waiting_period` evals
+        self.best_metric = -1
         self.early_stopping = False
-        self.waiting_period = 3  # Stop if no improvement for 3 evaluations
+        self.waiting_period = 3
         self.current_waiting_period = self.waiting_period
 
 
-        self.ePAD = self.entity_vocab['PAD'] # entity padding index
-        self.rPAD = self.relation_vocab['PAD'] # relation padding index
+        self.ePAD = self.entity_vocab['PAD']
+        self.rPAD = self.relation_vocab['PAD']
 
-        # Initialize baseline for reward adjustment and optimizer
         self.baseline = ReactiveBaseline(l=self.Lambda)
         self.optimizer = torch.optim.Adam(self.agent.parameters(), lr=self.learning_rate)
 
-        self.global_step_tensor = 0  # Track global step for learning rate decay
+        self.global_step_tensor = 0
 
-        #self.tensorboard_dir = tensorboard_dir
-
-        #self.summary_writer = SummaryWriter(log_dir=self.tensorboard_dir)
-
-        ## NEW: load node labels/types for JSON output (from graph_labels.tsv)
+        # Load node labels/types for JSON output (from graph_labels.tsv)
         self._node_labels = {}   # entity_id -> human-readable label
         self._node_types  = {}   # entity_id -> type string (e.g. "Compound")
         try:
@@ -170,7 +162,7 @@ class Trainer(object):
         except Exception as e:
             logger.warning(f"[JSON] Could not load graph_labels.tsv: {e}")
 
-        ## NEW: try to load ontology DAGs for LCA computation
+        # Try to load ontology DAGs for LCA computation
         self._lca_ready = False
         self._lca_pair_cache = {}  # (dag_name, frozenset({n1,n2})) -> URIRef or None
         if getattr(self, 'skip_lca', False):
@@ -220,7 +212,6 @@ class Trainer(object):
                     _time.sleep(3)
                 else:
                     logger.warning("[LCA] All attempts failed, LCA disabled")
-        ## END NEW
 
     def set_random_seed(self, seed):
         """
@@ -228,11 +219,11 @@ class Trainer(object):
         :param seed: The seed value to use. If None, no seed is set.
         """
         if seed is not None:
-            os.environ['PYTHONHASHSEED'] = str(seed)  # Fix hash-based randomness
+            os.environ['PYTHONHASHSEED'] = str(seed)
             torch.manual_seed(seed)
             torch.cuda.manual_seed(seed)
             np.random.seed(seed)
-            random.seed(seed)  # Python's random seed
+            random.seed(seed)
             logger.info(f"Random seeds set to {seed}")
 
 
@@ -410,7 +401,7 @@ class Trainer(object):
         ent_ids = [self.rev_entity_vocab[e] for e in p['entities']]
         rel_ids = [self.rev_relation_vocab[rr] for rr in p['relations']]
 
-        ## Recompute ic_mean from the final path
+        # Recompute ic_mean from the final path
         edges_weight = episode.grapher.edges_weight
         ic_weights = []
         for i, rel in enumerate(rel_ids):
@@ -472,31 +463,23 @@ class Trainer(object):
         Compute the REINFORCE loss with baseline and entropy regularization
         """
 
-        # Stack losses across all time steps
-        loss = torch.stack(per_example_loss, axis=1) # [B, T]
+        loss = torch.stack(per_example_loss, axis=1)  # [B, T]
 
-        # Compute the baseline value for reward adjustment
         baseline = self.baseline.get_baseline_value()
         baseline = torch.tensor(baseline, dtype=torch.float32, device=self.device)
 
-        # Compute reward difference from baseline and normalize
+        # Reward difference from baseline, normalized for stability (1e-6 floor)
         final_reward = cum_discounted_reward - baseline
-        reward_mean = torch.mean(final_reward) # NOTE: use just python functions?
-        #reward_mean = final_reward.mean()
-        #reward_std = final_reward.std() + 1e-6 # stability adjustment
-        # Constant added for numerical stability
-        reward_std = torch.std(final_reward) + 1e-6 # stability adjustment
+        reward_mean = torch.mean(final_reward)
+        reward_std = torch.std(final_reward) + 1e-6
         final_reward = torch.div(final_reward - reward_mean, reward_std)
 
-        # Adjust loss using the normalized reward
-        #loss = torch.mul(loss, final_reward)  # [B, T]
         loss = loss * final_reward  # [B, T]
-        self.loss_before_reg = loss # NOTE: check if this is necessary
+        self.loss_before_reg = loss
 
         decaying_beta = self.beta * (0.90 ** (self.global_step_tensor / 200))
 
-        # Add entropy regularization to encourage exploration
-        #total_loss = torch.mean(loss) - decaying_beta * self.entropy_reg_loss(per_example_logits)
+        # Entropy regularization to encourage exploration
         total_loss = loss.mean() - decaying_beta * self.entropy_reg_loss(per_example_logits)
 
         return total_loss
@@ -511,109 +494,6 @@ class Trainer(object):
         )  # Negative entropy
         return entropy_policy
 
-    # def initialize(self, restore=None, sess=None):
-    #     """
-    #     Initialize the TensorFlow computation graph and initializes variables. 
-    #     """
-
-    #     logger.info("Creating TF graph...")
-
-    #     # Create placeholders for inputs at each time step
-    #     self.candidate_relation_sequence = []
-    #     self.candidate_entity_sequence = []
-    #     self.next_weights_sequence = [] # Placeholder for edge weights
-    #     self.input_path = []
-    #     self.first_state_of_test = tf.placeholder(tf.bool, name="is_first_state_of_test")
-    #     self.query_relation = tf.placeholder(tf.int32, [None], name="query_relation")
-    #     self.range_arr = tf.placeholder(tf.int32, shape=[None, ])
-    #     self.global_step = tf.Variable(0, trainable=False)
-    #     self.decaying_beta = tf.train.exponential_decay(self.beta, self.global_step,
-    #                                                200, 0.90, staircase=False)
-    #     self.entity_sequence = []
-    #     self.cum_discounted_reward = tf.placeholder(tf.float32, [None, self.path_length],
-    #                                                 name="cumulative_discounted_reward")
-
-    #     # Placeholder definitions for each step in the path
-    #     for t in range(self.path_length):
-    #         next_possible_relations = tf.placeholder(tf.int32, [None, self.max_num_actions],
-    #                                                name="next_relations_{}".format(t))
-    #         next_possible_entities = tf.placeholder(tf.int32, [None, self.max_num_actions],
-    #                                                  name="next_entities_{}".format(t))
-
-    #         next_weights = tf.placeholder(tf.float32, [None, self.max_num_actions], # Placeholder for edge weights
-    #                                                     name="next_weights_{}".format(t))
-
-    #         input_label_relation = tf.placeholder(tf.int32, [None], name="input_label_relation_{}".format(t))
-    #         start_entities = tf.placeholder(tf.int32, [None, ])
-    #         self.input_path.append(input_label_relation)
-    #         self.candidate_relation_sequence.append(next_possible_relations)
-    #         self.candidate_entity_sequence.append(next_possible_entities)
-    #         self.entity_sequence.append(start_entities)
-    #         self.next_weights_sequence.append(next_weights) # Append edge weights
-    #         self.loss_before_reg = tf.constant(0.0)
-
-
-    #     # Compute losses and logits for all steps
-    #     self.per_example_loss, self.per_example_logits, self.action_idx = self.agent(
-    #         self.candidate_relation_sequence,
-    #         self.candidate_entity_sequence, 
-    #         self.entity_sequence,
-    #         self.next_weights_sequence, # Add edge weights
-    #         self.input_path,
-    #         self.query_relation, 
-    #         self.range_arr,
-    #         self.first_state_of_test, 
-    #         self.path_length
-    #         )
-
-
-    #     # Compute the REINFORCE loss
-    #     self.loss_op = self.calc_reinforce_loss()
-
-    #     # Define brackpropagation operation
-    #     self.train_op = self.bp(self.loss_op)
-
-    #     # Build the test graph
-    #     self.prev_state = tf.placeholder(tf.float32, self.agent.get_mem_shape(), name="memory_of_agent")
-    #     self.prev_relation = tf.placeholder(tf.int32, [None, ], name="previous_relation")
-    #     self.query_embedding = tf.nn.embedding_lookup(self.agent.relation_lookup_table, self.query_relation)  # [B, 2D]
-    #     layer_state = tf.unstack(self.prev_state, self.LSTM_layers)
-    #     formated_state = [tf.unstack(s, 2) for s in layer_state]
-    #     self.next_relations = tf.placeholder(tf.int32, shape=[None, self.max_num_actions])
-    #     self.next_entities = tf.placeholder(tf.int32, shape=[None, self.max_num_actions])
-
-    #     self.current_entities = tf.placeholder(tf.int32, shape=[None,])
-
-    #     with tf.variable_scope("policy_steps_unroll") as scope:
-    #         scope.reuse_variables()
-    #         self.test_loss, test_state, self.test_logits, self.test_action_idx, self.chosen_relation = self.agent.step(
-    #             self.next_relations, self.next_entities, self.next_weights_sequence[0], formated_state, self.prev_relation, self.query_embedding,
-    #             self.current_entities, self.input_path[0], self.range_arr, self.first_state_of_test)
-    #         self.test_state = tf.stack(test_state)
-
-    #     logger.info('TF Graph creation done..')
-    #     self.model_saver = tf.train.Saver(max_to_keep=2)
-
-    #     # Return the variable initializer or restore the model
-    #     if not restore:
-    #         return tf.global_variables_initializer()
-    #     else:
-    #         return  self.model_saver.restore(sess, restore)
-
-    # def initialize_pretrained_embeddings(self, sess):
-    #     """
-    #     Initialize the agent's embeddings with pretrained embeddings
-    #     """
-    #     if self.pretrained_embeddings_action != '':
-    #         embeddings = np.loadtxt(open(self.pretrained_embeddings_action))
-    #         _ = sess.run((self.agent.relation_embedding_init),
-    #                      feed_dict={self.agent.action_embedding_placeholder: embeddings})
-    #     if self.pretrained_embeddings_entity != '':
-    #         embeddings = np.loadtxt(open(self.pretrained_embeddings_entity))
-    #         _ = sess.run((self.agent.entity_embedding_init),
-    #                      feed_dict={self.agent.entity_embedding_placeholder: embeddings})
-
-
     def calc_cum_discounted_reward(self, rewards):
         """
         calculates the cumulative discounted reward.
@@ -624,12 +504,12 @@ class Trainer(object):
         """
         running_add = np.zeros([rewards.shape[0]])  # [B]
         cum_disc_reward = np.zeros([rewards.shape[0], self.path_length])  # [B, T]
-        cum_disc_reward[:, self.path_length - 1] = rewards  # set the last time step to the reward received at the last state
+        cum_disc_reward[:, self.path_length - 1] = rewards  # final-state reward sits at last time step
         for t in reversed(range(self.path_length)):
             running_add = self.gamma * running_add + cum_disc_reward[:, t]
             cum_disc_reward[:, t] = running_add
         return cum_disc_reward
-    
+
     def train(self):
         """
         Trains the agent using Reinforce on the training environment
@@ -640,11 +520,10 @@ class Trainer(object):
         self.batch_counter = 0
         cumulative_reward = 0
 
-        # Iterate through episodes from the training environment
         for episode in self.train_environment.get_episodes():
-            # Set our agent to training mode, as it extends nn.Module
+            # Agent extends nn.Module, so set training mode
             self.agent.train()
-            
+
             self.batch_counter += 1
             Episode.set_training_step(self.batch_counter)
             self.global_step_tensor = self.batch_counter
@@ -663,10 +542,9 @@ class Trainer(object):
             per_example_loss = []
             per_example_logits = []
             action_idx_list = []
-            
+
             for i in range(self.path_length):
-                #print(f"Processing step {i}/{self.path_length} of episode {self.batch_counter}")
-                next_relations = torch.tensor(state['next_relations'], 
+                next_relations = torch.tensor(state['next_relations'],
                                             dtype=torch.long, device=self.device)
                 next_entities = torch.tensor(state['next_entities'], 
                                             dtype=torch.long, device=self.device)
@@ -698,21 +576,18 @@ class Trainer(object):
 
                 prev_relation = chosen_relation
 
-                # Update the state based on chosen actions
                 idx = action_idx.cpu().numpy()
                 state = episode(idx)
-            
-            # Get rewards and compute cumulative discounted reward
+
             rewards = episode.get_reward_agenticAI()
             cum_discounted_reward = self.calc_cum_discounted_reward(rewards)
-            cum_discounted_reward = torch.tensor(cum_discounted_reward, 
+            cum_discounted_reward = torch.tensor(cum_discounted_reward,
                                                 dtype=torch.float32, device=self.device)
-            
-            # Perform backpropagation
+
             self.optimizer.zero_grad()
-            total_loss = self.calc_reinforce_loss(per_example_loss, per_example_logits, 
+            total_loss = self.calc_reinforce_loss(per_example_loss, per_example_logits,
                                                  cum_discounted_reward)
-            
+
             total_loss.backward()
             torch.nn.utils.clip_grad_norm_(self.agent.parameters(), self.grad_clip_norm)
             self.optimizer.step()
@@ -722,7 +597,6 @@ class Trainer(object):
             batch_total_loss = total_loss.item()
             train_loss = 0.98 * train_loss + 0.02 * batch_total_loss
 
-            # Log statistics
             avg_reward = np.mean(rewards)
             reward_reshape = np.reshape(rewards, (self.batch_size, self.num_rollouts))
             reward_reshape = np.sum(reward_reshape, axis=1)
@@ -737,45 +611,30 @@ class Trainer(object):
                        format(self.batch_counter, np.sum(rewards), avg_reward, num_ep_correct,
                              (num_ep_correct / self.batch_size), train_loss))
 
-            #self.summary_writer.add_scalar('avg_reward_per_batch', avg_reward, self.batch_counter)
-            #self.summary_writer.add_scalar('avg_positive_reward', avg_positive_reward, self.batch_counter)
-            #self.summary_writer.add_scalar('mean_total_reward', mean_total_reward, self.batch_counter)
-            #self.summary_writer.add_scalar('train_loss', train_loss, self.batch_counter)
-            #self.summary_writer.add_scalar('avg_ep_correct', (num_ep_correct / self.batch_size),
-            #                              self.batch_counter)
-            
-            # Evaluate model periodically (ONLY ONCE!)
             if self.batch_counter % self.eval_every == 0:
                 with open(self.output_dir + '/scores.txt', 'a') as score_file:
                     score_file.write("Score for iteration " + str(self.batch_counter) + "\n")
-                
-                #os.mkdir(self.path_logger_file + "/" + str(self.batch_counter))  # FIX TEST - removed numbered folders
+
                 self.path_logger_file_ = self.path_logger_file + "/paths"
-                
+
                 current_mrr = self.test(beam=True, print_paths=False)
-            
-            # Check early stopping
+
             if self.early_stopping:
                 logger.info(f"[TRAINING STOPPED] Early stopping triggered at iteration {self.batch_counter}")
                 break
-            
-            # Check if reached max iterations
+
             if self.batch_counter >= self.total_iterations:
                 logger.info(f"[TRAINING COMPLETE] Reached maximum iterations: {self.total_iterations}")
                 break
-            
+
             gc.collect()
-        
-        # Close summary writer AFTER the loop ends
-        #self.summary_writer.close()
-    
-    
+
+
     def test(self, beam = True, print_paths = True, save_model = True, mrr = True):
         """
         Tests the trained agent on the test environment.
 
         Args:
-            sess: The current TensorFlow session.
             beam: Whether to use beam search for test evaluation.
             print_paths: Whether to log the paths taken by the agent.
             save_model: Whether to save the model if it achieves the best performance.
@@ -785,9 +644,8 @@ class Trainer(object):
             None. Logs results and saves paths/rewards.
         """
         batch_counter = 0
-        paths = defaultdict(list) # store paths taken by the agent
-        answers = [] # store answers for analysis
-        #feed_dict = {}
+        paths = defaultdict(list)
+        answers = []
         final_rewards = {
         "Hits@1": 0,
         "Hits@3": 0,
@@ -800,54 +658,40 @@ class Trainer(object):
         correct_groups = {}
         all_tested_pairs = []  # track every pair tested, in order
 
-        # Set our agent to evaluation mode
         self.agent.eval()
 
 
         print("ENTERING TEST LOOP")
 
-        # Total number of examples to evaluate
         total_examples = self.test_environment.total_no_examples
 
-        # Iterate through episodes from the test environment
         for episode in tqdm(self.test_environment.get_episodes()):
             batch_counter += 1
             temp_batch_size = episode.no_examples
 
-            # Initialize query relation and state
             self.qr = episode.get_query_relation()
-            #self.qr = torch.tensor(episode.get_query_relation(), dtype=torch.long, device=self.device)
             qr_emb = self.agent.relation_lookup_table(torch.tensor(episode.get_query_relation(), dtype=torch.long, device=self.device))  # [B, 2D]
-            beam_probs = np.zeros((temp_batch_size * self.test_rollouts, 1)) # initial beam probs
-            state = episode.get_state() # initial state
+            beam_probs = np.zeros((temp_batch_size * self.test_rollouts, 1))
+            state = episode.get_state()
 
-            # Initialize agent memory and previous relation
-            #mem = self.agent.get_mem_shape()
-            #agent_mem = np.zeros((mem[0], mem[1], temp_batch_size*self.test_rollouts, mem[3]) ).astype('float32')
             agent_mem = self.agent.zero_state(temp_batch_size * self.test_rollouts)
-            #previous_relation = np.ones((temp_batch_size * self.test_rollouts, ), dtype='int64') * self.relation_vocab[
-            #    'DUMMY_START_RELATION']
-            previous_relation = torch.full((temp_batch_size * self.test_rollouts,), 
-                                         fill_value=self.relation_vocab['DUMMY_START_RELATION'], 
+            previous_relation = torch.full((temp_batch_size * self.test_rollouts,),
+                                         fill_value=self.relation_vocab['DUMMY_START_RELATION'],
                                          dtype=torch.long, device=self.device)
             range_arr = torch.arange(temp_batch_size * self.test_rollouts, dtype=torch.long, device=self.device)
 
-            # Initialize tracking of visited entities
             visited_entities = np.zeros((temp_batch_size * self.test_rollouts, 1), dtype=np.int32)
-            visited_entities[:, 0] = state['current_entities']  # begin with current entities
+            visited_entities[:, 0] = state['current_entities']
 
             if print_paths:
-                self.entity_trajectory = [] # track entities visited
-                self.relation_trajectory = [] # track relations traversed
+                self.entity_trajectory = []
+                self.relation_trajectory = []
 
-            # Initialize log probabilities
-            #self.log_probs = np.zeros((temp_batch_size*self.test_rollouts,)) * 1.0
             self.log_probs = np.zeros((temp_batch_size*self.test_rollouts,), dtype=np.float32)
 
 
-            # Process each time step in the path
             for i in range(self.path_length):
-                if i == 0: # first state
+                if i == 0:
                     first_state_of_test = True
 
                 next_relations = torch.tensor(state['next_relations'], dtype=torch.long, device=self.device)
@@ -858,45 +702,39 @@ class Trainer(object):
                 prev_relation = previous_relation
                 label_action = torch.zeros(temp_batch_size * self.test_rollouts, dtype=torch.long, device=self.device)
 
-                # Run the agent step
                 loss, agent_mem, test_scores, test_action_idx, chosen_relation = self.agent.step(
                     next_relations, next_entities, next_weights, prev_state, prev_relation, qr_emb, current_entities,
                     label_action, range_arr, first_state_of_test)
-                
+
                 test_scores = test_scores.detach().cpu().numpy()
 
-                # Perform beam search
-                # if active will prioritize actions with higher acummulated scores
+                # Beam search prioritizes actions with higher accumulated scores
                 if beam:
-                    k = self.test_rollouts # Number of beams
-                    new_scores = test_scores + beam_probs # Update scores with beam probabilities
-                    
-                    if i == 0: # first step
-                        idx = np.argsort(new_scores) 
+                    k = self.test_rollouts
+                    new_scores = test_scores + beam_probs
+
+                    if i == 0:
+                        idx = np.argsort(new_scores)
                         idx = idx[:, -k:]
                         ranged_idx = np.tile([b for b in range(k)], temp_batch_size)
                         idx = idx[np.arange(k*temp_batch_size), ranged_idx]
                     else:
-                        idx = self.top_k(new_scores, k) # Get top k indices
+                        idx = self.top_k(new_scores, k)
 
-                    # Update beam information
                     y = idx // self.max_num_actions
                     x = idx % self.max_num_actions
 
-                    ## FIX BEAM - offset y BEFORE reindexing so each query group
-                    ## stays aligned with its own rows (not query 0’s rows)
+                    # Offset y BEFORE reindexing so each query group stays aligned
+                    # with its own rows (not query 0's rows).
                     y += np.repeat([b*k for b in range(temp_batch_size)], k)
 
-                    # SHIFT the environment’s arrays to maintain correct alignment
+                    # Shift the environment's arrays to maintain correct alignment
                     episode.visited_entities = episode.visited_entities[y, :]
                     episode.done_mask        = episode.done_mask[y]
                     episode.current_entities = episode.current_entities[y]
                     state['current_entities'] = state['current_entities'][y]
-                    ## END FIX BEAM
                     state['next_relations'] = state['next_relations'][y,:]
                     state['next_entities'] = state['next_entities'][y, :]
-                    #agent_mem = agent_mem[:, :, y, :]
-                    # TODO: check if this is correct
                     h, c = agent_mem
                     h = h[:, y, :].contiguous()
                     c = c[:, y, :].contiguous()
@@ -919,7 +757,6 @@ class Trainer(object):
                     self.entity_trajectory.append(state['current_entities'])
                     self.relation_trajectory.append(chosen_relation)
 
-                # Update the state with the chosen actions
                 state = episode(test_action_idx)
                 step_scores = test_scores[np.arange(self.log_probs.shape[0]), test_action_idx]
                 step_scores[episode.done_mask] = 0.0
@@ -931,17 +768,18 @@ class Trainer(object):
                 self.entity_trajectory.append(
                     state['current_entities'])
 
-            # Process final rewards from environment
-            #HITS@k/MRR only checks reward > 0 (i.e. fidelity).
-            # For validation tests (print_paths=False), the LLM-shaped scores in
-            # get_reward_agenticAI are computed but never used by the metric ranking.
-            # So we can skip the entire LLM call during validation
+            # Process final rewards from environment.
+            # HITS@k/MRR only checks reward > 0 (fidelity); the LLM blend
+            # value never enters the metric. So at test we skip the LLM here
+            # (metric_only=True keeps the same sign for the >0 check) and
+            # call the LLM separately on the JSON-bound paths after
+            # trim_and_rank_batch below.
             if print_paths:
-                rewards = episode.get_reward_agenticAI()
+                rewards = episode.get_reward_agenticAI(metric_only=True)
             else:
                 rewards = episode.get_reward_ic_based()
             reward_reshape = rewards.reshape((temp_batch_size, self.test_rollouts))
-            # reshape and sort on the *frozen* full‐log_probs
+            # Reshape and sort on the *frozen* full log_probs
             self.log_probs = self.log_probs.reshape((temp_batch_size, self.test_rollouts))
             sorted_indx  = np.argsort(-self.log_probs, axis=1)
             AP = 0.0
@@ -959,15 +797,28 @@ class Trainer(object):
                     K             = self.test_rollouts
                 )
 
-            # Compute HITS@k
+                # Per-batch LLM call: score the high-IC paths going in JSON.
+                # No top-K cap (addex is one pair at a time, per-pair count is small).
+                # Skip entirely with --no_llm_rerank=1 if you ever want a fast
+                # JSON-without-LLM dump.
+                if getattr(self, 'agentic_ai_enabled', False) and not int(getattr(self, 'no_llm_rerank', 0)):
+                    indices_to_score = []
+                    for b in range(temp_batch_size):
+                        for p in trimmed[b]:
+                            r = p['rollout_idx']
+                            indx = b * self.test_rollouts + r
+                            if rewards[indx] > 0 and episode.reward_kind[indx] == 'high_ic':
+                                indices_to_score.append(indx)
+                    if indices_to_score:
+                        episode.score_paths_for_json(indices_to_score)
+
             for b in range(temp_batch_size):
                 answer_pos = None
                 seen = set()
                 pos=0
                 if self.pool == 'max':
                     for r in sorted_indx[b]:
-                        #if reward_reshape[b,r] == self.positive_reward:
-                        if reward_reshape[b,r] > 0: # positive reward
+                        if reward_reshape[b,r] > 0:
                             answer_pos = pos
                             break
                         if ce[b, r] not in seen:
@@ -978,8 +829,7 @@ class Trainer(object):
                     answer = ''
                     for r in sorted_indx[b]:
                         scores[ce[b,r]].append(self.log_probs[b,r])
-                        #if reward_reshape[b,r] == self.positive_reward:
-                        if reward_reshape[b,r] > 0: # positive reward
+                        if reward_reshape[b,r] > 0:
                             answer = ce[b,r]
                     final_scores = defaultdict(float)
                     for e in scores:
@@ -990,7 +840,6 @@ class Trainer(object):
                     else:
                         answer_pos = None
 
-                # HITS@k update
                 if answer_pos is not None:
                     if answer_pos < 20:
                         final_rewards["Hits@20"] += 1
@@ -1006,66 +855,21 @@ class Trainer(object):
                     AP += 1.0/((answer_pos+1))
 
                 if print_paths:
-                    qr = self.rev_relation_vocab[self.qr[b * self.test_rollouts]]  ## FIX TEST
+                    qr = self.rev_relation_vocab[self.qr[b * self.test_rollouts]]
                     start_e = self.rev_entity_vocab[episode.start_entities[b * self.test_rollouts]]
                     end_e = self.rev_entity_vocab[episode.end_entities[b * self.test_rollouts]]
                     all_tested_pairs.append(f"{start_e} - {end_e}")
                     paths[str(qr)].append(str(start_e) + "\t" + str(end_e) + "\n")
                     paths[str(qr)].append("Reward:" + str(1 if answer_pos != None and answer_pos < 10 else 0) + "\n")
-                    # for p in trimmed[b]:
-                    #     # use the rollout index to recover reward & beam-score
-                    #     r = p['rollout_idx']
-                    #     indx = b * self.test_rollouts + r
-
-                    #     # Get the agentic score (will be 0 if path failed)
-                    #     agentic_score = episode.agentic_scores[indx] if episode.agentic_scores is not None else 0.0
-                    #     score_line = f"{agentic_score:.4f}"
-                       
-                    #    # Binary reward indicator (1 if reached target with positive reward, -1 otherwise)
-                    #     rev = 1 if rewards[indx] > 0 else -1
-
-                    #     rk = episode.reward_kind[indx] if hasattr(episode, "reward_kind") else "n/a"
-
-                    #     # Build the score line
-                    #     score_line = f"{agentic_score:.4f} ({rk})"
-
-                    #     # If this path was scored by LLM, add dimensions
-                    #     if indx in episode.llm_dimensions:
-                    #         dims = episode.llm_dimensions[indx]
-                    #         score_line += f" v:{dims['validity']:.0f} c_conv:{dims['completeness_conv']:.0f} r:{dims['relevance']:.0f}"
-                        
-                    #     # elif hasattr(episode, 'reward_kind'):
-                    #     #     score_line += f" ({episode.reward_kind[indx]})"
-
-                    #     # OPTIONAL: still record args for answers[]
-                    #     answers.append(
-                    #         f"{self.rev_entity_vocab[se[b,r]]}\t"
-                    #         f"{self.rev_entity_vocab[ce[b,r]]}\t"
-                    #         f"{self.log_probs[b,r]:.4f}\n"
-                    #     )
-                    #     # now print the *trimmed* path
-                    #     paths[str(qr)].append(
-                    #         '\t'.join(self.rev_entity_vocab[e] for e in p['entities']) + '\n' +
-                    #         '\t'.join(self.rev_relation_vocab[r] for r in p['relations']) + '\n' +
-                    #         #f"{rev}\n{p['score']:.4f}\n___\n"
-                    #         f"{rev}\n"
-                    #         f"{p['score']:.4f}\n"  # beam score (log prob)
-                    #         f"{score_line}\n___\n"  # agentic score + optional dimensions
-                    #      )
-
-                    #     self._keep_correct_entry(correct_groups, episode, b, r, p, rewards)
-
-                                            
-                    # paths[str(qr)].append("#####################\n")
                     for p in trimmed[b]:
-                        # use the rollout index to recover reward & beam-score
+                        # Use the rollout index to recover reward & beam-score
                         r = p['rollout_idx']
                         indx = b * self.test_rollouts + r
 
-                        # Get the agentic score (will be 0 if path failed)
+                        # Agentic score is 0 if the path failed
                         agentic_score = episode.agentic_scores[indx] if episode.agentic_scores is not None else 0.0
 
-                        # Binary reward indicator (1 if reached target with positive reward, -1 otherwise)
+                        # Binary reward indicator: 1 if reached target with positive reward, else -1
                         rev = 1 if rewards[indx] > 0 else -1
 
                         rk = episode.reward_kind[indx] if hasattr(episode, "reward_kind") else "n/a"
@@ -1078,13 +882,11 @@ class Trainer(object):
                             except Exception:
                                 ic_avg = None
 
-                        # Build the score line
                         score_line = f"{agentic_score:.4f} ({rk})"
                         # Add IC average for all cases except "(none)"
                         if rk and rk.strip().lower() != "none" and ic_avg is not None:
                             score_line += f" ic_avg:{ic_avg:.3f}"
 
-                        # If this path was scored by LLM, add dimensions
                         if indx in episode.llm_dimensions:
                             dims = episode.llm_dimensions[indx]
                             score_line += (
@@ -1093,14 +895,12 @@ class Trainer(object):
                                 f" r:{dims['relevance']:.0f}"
                             )
 
-                        # OPTIONAL: still record args for answers[]
                         answers.append(
                             f"{self.rev_entity_vocab[se[b,r]]}\t"
                             f"{self.rev_entity_vocab[ce[b,r]]}\t"
                             f"{self.log_probs[b,r]:.4f}\n"
                         )
 
-                        # now print the *trimmed* path
                         paths[str(qr)].append(
                             '\t'.join(self.rev_entity_vocab[e] for e in p['entities']) + '\n' +
                             '\t'.join(self.rev_relation_vocab[r] for r in p['relations']) + '\n' +
@@ -1114,35 +914,26 @@ class Trainer(object):
                     paths[str(qr)].append("#####################\n")
 
 
-                    
 
             final_rewards["MRR"] += AP
 
-        # Normalize the final rewards
         for key in final_rewards:
             final_rewards[key] /= total_examples
 
-        # # Save the model if it achieves the best performance
-        # if save_model and final_rewards["Hits@10"] >= self.max_hits_at_10:
-        #     self.max_hits_at_10 = final_rewards["Hits@10"]
-        #     self.save_path = self.model_saver.save(sess, self.model_dir + "model" + '.ckpt')
-
-        #NEW WITH EARLY STOP EAVALUATION
         if save_model:
-                current_metric = final_rewards["MRR"]  # Use MRR as the metric
-                
+                current_metric = final_rewards["MRR"]
+
                 if current_metric > self.best_metric:
                     self.best_metric = current_metric
-                    self.current_waiting_period = self.waiting_period  # Reset WAITING 
-                    #self.save_path = self.model_saver.save(sess, self.model_dir + "model" + '.ckpt')
+                    self.current_waiting_period = self.waiting_period
                     # FIXME: we aren't yet saving models, or loading them later on
                     self.save_path = self.model_dir
                     self.model_path = os.path.join(self.model_dir, "model.ckpt")
                     torch.save(self.agent.state_dict(), self.model_path)
-                    self.max_hits_at_10 = final_rewards["Hits@10"]  # Keep existing logic
+                    self.max_hits_at_10 = final_rewards["Hits@10"]
                     logger.info(f"[IMPROVE] New best MRR: {current_metric:.4f} at iteration {self.batch_counter}")
-                    
-                    # >>> NEW: write sidecar next to the checkpoint <<<
+
+                    # Write sidecar next to the checkpoint
                     try:
                         meta = {
                             "best_step": int(self.batch_counter),
@@ -1164,10 +955,9 @@ class Trainer(object):
                     if self.current_waiting_period == 0:
                         self.early_stopping = True
                         logger.info(f"[EARLY STOP] Best MRR was {self.best_metric:.4f}")
-        # Log paths and answers (skip in viz_mode — only JSON needed)
+        # Skip path/answer logging in viz_mode (only JSON needed)
         if not getattr(self, 'viz_mode', False):
             if print_paths:
-                #logger.info("[ printing paths at {} ]".format(self.output_dir+'/test_beam/'))
                 for q in paths:
                     j = q.replace('/', '-')
                     with codecs.open(self.path_logger_file_ + '_' + j, 'a', 'utf-8') as pos_file:
@@ -1193,15 +983,13 @@ class Trainer(object):
                 if pid not in seen_pairs:
                     seen_pairs.add(pid)
                     unique_tested_pairs.append(pid)
-    
+
             pairs_list = []
             path_counter = 1
             for pair_id in unique_tested_pairs:
                 if pair_id in correct_groups:
                     path_entries = correct_groups[pair_id]
-                    # Sort by final_score descending
                     path_entries.sort(key=lambda x: x["score"]["final_score"], reverse=True)
-                    # Assign sequential path IDs
                     for entry in path_entries:
                         entry["id"] = f"path_{path_counter}"
                         path_counter += 1
@@ -1210,22 +998,21 @@ class Trainer(object):
                         "paths": path_entries,
                     })
                 else:
-                    # No correct paths found for this pair
                     pairs_list.append({
                         "id": pair_id,
                         "warning": "No valid explanation paths found for this pair. "
                                    "The model could not reach the target entity.",
                         "paths": [],
                     })
-    
+
             output = {"pairs": pairs_list}
             json_path = self.path_logger_file_ + ".json"
             with open(json_path, "w", encoding="utf-8") as f:
                 json.dump(output, f, ensure_ascii=False, indent=2)
-            logger.info(f"[SAVED] Grouped JSON → {json_path} "
+            logger.info(f"[SAVED] Grouped JSON -> {json_path} "
                          f"({sum(1 for p in pairs_list if p['paths'])} with paths, "
                          f"{sum(1 for p in pairs_list if not p['paths'])} with warnings)")
-    
+
 
         return final_rewards["MRR"]
 
@@ -1265,9 +1052,9 @@ class Trainer(object):
         """
         Get the top k indices
         """
-        scores = scores.reshape(-1, k * self.max_num_actions) 
+        scores = scores.reshape(-1, k * self.max_num_actions)
         idx = np.argsort(scores, axis=1)
-        idx = idx[:, -k:] # top k indices
+        idx = idx[:, -k:]
         return idx.reshape((-1))
 
 if __name__ == '__main__':
@@ -1288,40 +1075,24 @@ if __name__ == '__main__':
     options['relation_vocab'] = json.load(open(options['vocab_dir'] + '/relation_vocab.json'))
     options['entity_vocab'] = json.load(open(options['vocab_dir'] + '/entity_vocab.json'))
     options['edges_weight'] = json.load(open(options['data_input_dir'] + 'clustered_IC_classes_edgeType.json' ))
-    #options['edges_weight'] = json.load(open(options['data_input_dir'] + 'clustered_IC_classes.json' ))
-    #options['edges_weight'] = json.load(open(options['data_input_dir'] + 'icNodeDegree_classes.json' ))
-    ######## 
-  
+
     logger.info('Total number of entities {}'.format(len(options['entity_vocab'])))
     logger.info('Total number of relations {}'.format(len(options['relation_vocab'])))
     save_path = ''
 
-    # Code to allow for loading of existing model, uncomment this and comment the next two code blocks titled #TRAINING and #TESTING
     trainer = Trainer(options)
     if not options['load_model']:
-        #TRAINING
         trainer.train()
         save_path = trainer.save_path
         path_logger_file = trainer.path_logger_file
         output_dir = trainer.output_dir
 
     else:
-        #SKIP TRAINING - load model directly
         logger.info("Skipping training")
         logger.info("Loading model from {}".format(options["model_load_dir"]))
         save_path = options["model_load_dir"]
         path_logger_file = trainer.path_logger_file
         output_dir = trainer.output_dir
-    
-    # #TRAINING
-    # trainer = Trainer(options)
-    # trainer.train()
-    # save_path = trainer.save_path
-    # path_logger_file = trainer.path_logger_file
-    # output_dir = trainer.output_dir
-
-    # #TESTING
-    # trainer.test_rollouts = 100
 
     if options['viz_mode']:
         trainer.path_logger_file_ = path_logger_file + "/paths"
@@ -1346,29 +1117,34 @@ if __name__ == '__main__':
             best_step = int(meta.get("best_step", 0))
             model = meta.get("model_path", save_path)
             th = float(meta.get("threshold", threshold_for_step(best_step)))
-            logger.info(f"[TEST] Using best_step={best_step} → threshold={th:.2f} (from {sidecar})")
+            logger.info(f"[TEST] Using best_step={best_step} -> threshold={th:.2f} (from {sidecar})")
         except Exception as e:
             logger.warning(f"[TEST] Failed to read {sidecar}: {e}; defaulting step=0, threshold={threshold_for_step(0):.2f}")
     else:
         logger.warning(f"[TEST] {sidecar} not found; defaulting step=0, threshold={threshold_for_step(0):.2f}")
 
-    ## FIX TEST - resolve relative model path to absolute
     if model and not os.path.isabs(model):
         model = os.path.join(os.getcwd(), model)
-    ## END FIX TEST
 
-    ## FIX TEST - fallback if model_path not found
     if not model or not os.path.exists(model):
         fallback = os.path.join(ckpt_dir, "model.ckpt")
         logger.warning(f"[TEST] model_path not found ({model}), trying fallback: {fallback}")
         model = fallback
-    ## END FIX TEST
 
     # Load best model weights and parameters
     trainer.agent.load_state_dict(torch.load(model, map_location=trainer.device))
 
     # Make the threshold logic in Episode use this step
     Episode.set_training_step(best_step)
+
+    # Floor the test-time LLM threshold at 0.65 (or curriculum value if higher).
+    # Avoids re-running the LLM on weak high-IC paths when best_step came from
+    # an early curriculum stage. ADDEx keeps the curriculum threshold because
+    # it scores one pair at a time.
+    test_threshold = max(0.65, threshold_for_step(best_step))
+    Episode.set_test_threshold_override(test_threshold)
+    logger.info(f"[TEST] LLM threshold floored to {test_threshold:.2f} "
+                f"(curriculum was {threshold_for_step(best_step):.2f})")
 
     trainer.test(beam = True, print_paths = True, save_model = False)
 

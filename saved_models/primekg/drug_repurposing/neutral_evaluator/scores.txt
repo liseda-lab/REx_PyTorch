@@ -1,79 +1,80 @@
 Score for iteration 10
-Hits@1:  0.0266
-Hits@3:  0.0437
-Hits@5:  0.0532
-Hits@10:  0.0692
-Hits@20:  0.0927
-MRR:  0.0414
+Hits@1:  0.0319
+Hits@3:  0.0586
+Hits@5:  0.0692
+Hits@10:  0.0820
+Hits@20:  0.1065
+MRR:  0.0512
 
 Score for iteration 20
-Hits@1:  0.0426
-Hits@3:  0.0714
-Hits@5:  0.0820
-Hits@10:  0.1054
-Hits@20:  0.1310
-MRR:  0.0654
+Hits@1:  0.0501
+Hits@3:  0.0863
+Hits@5:  0.1076
+Hits@10:  0.1267
+Hits@20:  0.1565
+MRR:  0.0778
 
 Score for iteration 30
-Hits@1:  0.0522
-Hits@3:  0.0948
-Hits@5:  0.1086
-Hits@10:  0.1438
-Hits@20:  0.1832
-MRR:  0.0835
+Hits@1:  0.0937
+Hits@3:  0.1395
+Hits@5:  0.1725
+Hits@10:  0.2236
+Hits@20:  0.2673
+MRR:  0.1351
 
 Score for iteration 40
-Hits@1:  0.1203
-Hits@3:  0.2258
-Hits@5:  0.2875
-Hits@10:  0.3791
-Hits@20:  0.4366
-MRR:  0.2031
+Hits@1:  0.1853
+Hits@3:  0.3770
+Hits@5:  0.4271
+Hits@10:  0.5154
+Hits@20:  0.6049
+MRR:  0.3004
 
 Score for iteration 50
-Hits@1:  0.2151
-Hits@3:  0.3759
-Hits@5:  0.4430
-Hits@10:  0.5197
-Hits@20:  0.5889
-MRR:  0.3181
+Hits@1:  0.2332
+Hits@3:  0.3781
+Hits@5:  0.4334
+Hits@10:  0.5250
+Hits@20:  0.5953
+MRR:  0.3291
 
 Score for iteration 60
-Hits@1:  0.2258
-Hits@3:  0.3887
-Hits@5:  0.4430
-Hits@10:  0.5272
-Hits@20:  0.5900
-MRR:  0.3278
+Hits@1:  0.2673
+Hits@3:  0.3866
+Hits@5:  0.4345
+Hits@10:  0.5282
+Hits@20:  0.6006
+MRR:  0.3534
 
 Score for iteration 70
-Hits@1:  0.2087
-Hits@3:  0.3834
-Hits@5:  0.4377
-Hits@10:  0.4973
-Hits@20:  0.5698
-MRR:  0.3159
+Hits@1:  0.2599
+Hits@3:  0.3876
+Hits@5:  0.4345
+Hits@10:  0.5069
+Hits@20:  0.5729
+MRR:  0.3447
 
 Score for iteration 80
-Hits@1:  0.2087
-Hits@3:  0.3791
-Hits@5:  0.4441
-Hits@10:  0.4846
-Hits@20:  0.5314
-MRR:  0.3096
+Hits@1:  0.2812
+Hits@3:  0.3855
+Hits@5:  0.4239
+Hits@10:  0.4867
+Hits@20:  0.5570
+MRR:  0.3491
 
 Score for iteration 90
-Hits@1:  0.2045
-Hits@3:  0.3589
-Hits@5:  0.4207
-Hits@10:  0.4750
-Hits@20:  0.5154
-MRR:  0.3009
+Hits@1:  0.2694
+Hits@3:  0.3749
+Hits@5:  0.4121
+Hits@10:  0.4771
+Hits@20:  0.5442
+MRR:  0.3383
 
-Test (beam) scores with best model
-Hits@3:  0.4292
-Hits@5:  0.4760
-Hits@10:  0.5410
-Hits@20:  0.5985
-MRR:  0.3640
+Test (beam) scores with best model from output/neutral_matrix/primekg__drug_repurposing__neutral_evaluator/rep5//03-05_18:12:14/model/
+Hits@1:  0.3163
+Hits@3:  0.4313
+Hits@5:  0.4792
+Hits@10:  0.5389
+Hits@20:  0.6017
+MRR:  0.3931
 

@@ -1,80 +1,88 @@
 Score for iteration 10
-Hits@1:  0.0193
-Hits@3:  0.0469
-Hits@5:  0.0588
-Hits@10:  0.0778
-Hits@20:  0.1136
-MRR:  0.0413
+Hits@1:  0.0259
+Hits@3:  0.0477
+Hits@5:  0.0568
+Hits@10:  0.0831
+Hits@20:  0.1181
+MRR:  0.0453
 
 Score for iteration 20
-Hits@1:  0.0226
-Hits@3:  0.0539
-Hits@5:  0.0687
-Hits@10:  0.0992
-Hits@20:  0.1399
-MRR:  0.0488
+Hits@1:  0.0284
+Hits@3:  0.0663
+Hits@5:  0.0835
+Hits@10:  0.1152
+Hits@20:  0.1556
+MRR:  0.0577
 
 Score for iteration 30
-Hits@1:  0.0374
-Hits@3:  0.0794
-Hits@5:  0.1082
-Hits@10:  0.1519
-Hits@20:  0.2008
-MRR:  0.0741
+Hits@1:  0.0436
+Hits@3:  0.1016
+Hits@5:  0.1395
+Hits@10:  0.1926
+Hits@20:  0.2498
+MRR:  0.0902
 
 Score for iteration 40
-Hits@1:  0.0671
-Hits@3:  0.1465
-Hits@5:  0.2074
-Hits@10:  0.3058
-Hits@20:  0.3877
-MRR:  0.1379
+Hits@1:  0.0979
+Hits@3:  0.1918
+Hits@5:  0.2543
+Hits@10:  0.3481
+Hits@20:  0.4276
+MRR:  0.1738
 
 Score for iteration 50
-Hits@1:  0.0840
-Hits@3:  0.1905
-Hits@5:  0.2514
-Hits@10:  0.3383
-Hits@20:  0.4317
-MRR:  0.1655
+Hits@1:  0.1012
+Hits@3:  0.2049
+Hits@5:  0.2745
+Hits@10:  0.3605
+Hits@20:  0.4486
+MRR:  0.1840
 
 Score for iteration 60
-Hits@1:  0.0856
-Hits@3:  0.1971
-Hits@5:  0.2597
-Hits@10:  0.3453
-Hits@20:  0.4457
-MRR:  0.1696
+Hits@1:  0.1095
+Hits@3:  0.2177
+Hits@5:  0.2774
+Hits@10:  0.3716
+Hits@20:  0.4547
+MRR:  0.1916
 
 Score for iteration 70
-Hits@1:  0.0852
-Hits@3:  0.1794
-Hits@5:  0.2457
-Hits@10:  0.3317
-Hits@20:  0.4255
-MRR:  0.1631
+Hits@1:  0.1070
+Hits@3:  0.2288
+Hits@5:  0.2897
+Hits@10:  0.3716
+Hits@20:  0.4584
+MRR:  0.1939
 
 Score for iteration 80
-Hits@1:  0.0733
-Hits@3:  0.1617
-Hits@5:  0.2107
-Hits@10:  0.2889
-Hits@20:  0.3642
-MRR:  0.1419
+Hits@1:  0.1070
+Hits@3:  0.2078
+Hits@5:  0.2765
+Hits@10:  0.3506
+Hits@20:  0.4321
+MRR:  0.1856
 
 Score for iteration 90
-Hits@1:  0.0782
-Hits@3:  0.1560
-Hits@5:  0.2037
-Hits@10:  0.2774
-Hits@20:  0.3547
-MRR:  0.1399
+Hits@1:  0.1049
+Hits@3:  0.2119
+Hits@5:  0.2667
+Hits@10:  0.3374
+Hits@20:  0.4218
+MRR:  0.1804
 
-Test (beam) scores with best model
-Hits@1:  0.0994
-Hits@3:  0.2233
-Hits@5:  0.2913
-Hits@10:  0.3910
-Hits@20:  0.4984
-MRR:  0.1930
+Score for iteration 100
+Hits@1:  0.0992
+Hits@3:  0.2012
+Hits@5:  0.2465
+Hits@10:  0.3214
+Hits@20:  0.4029
+MRR:  0.1727
+
+Test (beam) scores with best model from output/persona_runs/hetionet_dt/insight//03-05_18:54:36/model/
+Hits@1:  0.1040
+Hits@3:  0.2279
+Hits@5:  0.2979
+Hits@10:  0.4019
+Hits@20:  0.4932
+MRR:  0.1984
 

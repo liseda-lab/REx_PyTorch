@@ -1,87 +1,96 @@
 Score for iteration 10
-Hits@1:  0.0373
-Hits@3:  0.0682
-Hits@5:  0.0788
-Hits@10:  0.0969
-Hits@20:  0.1203
-MRR:  0.0607
+Hits@1:  0.0202
+Hits@3:  0.0490
+Hits@5:  0.0586
+Hits@10:  0.0809
+Hits@20:  0.0958
+MRR:  0.0409
 
 Score for iteration 20
-Hits@1:  0.0543
-Hits@3:  0.1001
-Hits@5:  0.1140
-Hits@10:  0.1438
-Hits@20:  0.1885
-MRR:  0.0878
+Hits@1:  0.0362
+Hits@3:  0.0650
+Hits@5:  0.0799
+Hits@10:  0.1044
+Hits@20:  0.1331
+MRR:  0.0596
 
 Score for iteration 30
-Hits@1:  0.0511
-Hits@3:  0.0990
-Hits@5:  0.1140
-Hits@10:  0.1683
-Hits@20:  0.2130
-MRR:  0.0890
+Hits@1:  0.0671
+Hits@3:  0.1086
+Hits@5:  0.1523
+Hits@10:  0.2119
+Hits@20:  0.2588
+MRR:  0.1094
 
 Score for iteration 40
-Hits@1:  0.1193
-Hits@3:  0.2247
-Hits@5:  0.2748
-Hits@10:  0.3674
-Hits@20:  0.4505
-MRR:  0.2021
+Hits@1:  0.2226
+Hits@3:  0.3813
+Hits@5:  0.4462
+Hits@10:  0.5272
+Hits@20:  0.6060
+MRR:  0.3248
 
 Score for iteration 50
-Hits@1:  0.2204
-Hits@3:  0.3823
-Hits@5:  0.4494
-Hits@10:  0.5346
-Hits@20:  0.5985
-MRR:  0.3267
+Hits@1:  0.2386
+Hits@3:  0.3845
+Hits@5:  0.4430
+Hits@10:  0.5240
+Hits@20:  0.5942
+MRR:  0.3353
 
 Score for iteration 60
-Hits@1:  0.2577
-Hits@3:  0.3930
-Hits@5:  0.4622
-Hits@10:  0.5165
-Hits@20:  0.5847
-MRR:  0.3472
+Hits@1:  0.2599
+Hits@3:  0.4015
+Hits@5:  0.4579
+Hits@10:  0.5293
+Hits@20:  0.5942
+MRR:  0.3491
 
 Score for iteration 70
-Hits@1:  0.2865
-Hits@3:  0.4089
-Hits@5:  0.4611
-Hits@10:  0.5059
-Hits@20:  0.5698
-MRR:  0.3649
+Hits@1:  0.2641
+Hits@3:  0.3994
+Hits@5:  0.4505
+Hits@10:  0.5261
+Hits@20:  0.5879
+MRR:  0.3493
 
 Score for iteration 80
-Hits@1:  0.2662
-Hits@3:  0.3855
-Hits@5:  0.4302
-Hits@10:  0.4867
-Hits@20:  0.5293
-MRR:  0.3413
+Hits@1:  0.2780
+Hits@3:  0.3887
+Hits@5:  0.4452
+Hits@10:  0.5037
+Hits@20:  0.5644
+MRR:  0.3502
 
 Score for iteration 90
-Hits@1:  0.2311
-Hits@3:  0.3557
-Hits@5:  0.4068
-Hits@10:  0.4558
-Hits@20:  0.5080
-MRR:  0.3111
+Hits@1:  0.2513
+Hits@3:  0.3749
+Hits@5:  0.4153
+Hits@10:  0.4760
+Hits@20:  0.5399
+MRR:  0.3302
 
 Score for iteration 100
-Hits@1:  0.2343
-Hits@3:  0.3621
-Hits@5:  0.4068
-Hits@10:  0.4643
-Hits@20:  0.5101
-MRR:  0.3103
+Hits@1:  0.2790
+Hits@3:  0.3695
+Hits@5:  0.4004
+Hits@10:  0.4611
+Hits@20:  0.5197
+MRR:  0.3399
 
-Test (beam) scores with best model 
-Hits@3:  0.4388
-Hits@5:  0.4920
-Hits@10:  0.5485
-Hits@20:  0.5921
-MRR:  0.3891
+Score for iteration 110
+Hits@1:  0.2439
+Hits@3:  0.3365
+Hits@5:  0.3834
+Hits@10:  0.4324
+Hits@20:  0.5080
+MRR:  0.3092
+
+Test (beam) scores with best model from output/primekg/drug_repurposing/insight_driven//27-04_03:16:22/model/
+Hits@1:  0.3056
+Hits@3:  0.4260
+Hits@5:  0.4686
+Hits@10:  0.5165
+Hits@20:  0.5719
+MRR:  0.3792
 

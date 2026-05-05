@@ -2,7 +2,8 @@
 
 This repository includes:
 -  The pytorch implementation for the REx [paper](https://www.ijcai.org/proceedings/2025/0515.pdf). The original implementation of REx in tensorflow can be found [here](https://github.com/liseda-lab/REx).
--   This implementation already includes a new adaptive approach (more details soon), but to use the original REX, just choose the `neutral_evaluator` files inside configs. 
+-   This implementation already includes a new adaptive approach (more details will be here soon). Original implementation can be found [here](https://github.com/liseda-lab/Perspective_XAI/)
+-   To use the original REX, just choose the `neutral_evaluator` files inside configs. 
 
 ## Guide to run the system
 
@@ -96,8 +97,8 @@ The scorer can also run standalone against any saved paths.json — `uv run pyth
 
 
 ### Authors
-- __Diogo Venes__
 - __Susana Nunes__
+- __Diogo Venes__
 - __Catia Pesquita__
 
 

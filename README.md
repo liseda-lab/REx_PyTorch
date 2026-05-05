@@ -66,7 +66,7 @@ For local mode, the `--local_model` parameter controls which model is loaded (de
 | Model | Download Size | RAM/VRAM | Recommended for |
 |-------|--------------|----------|-----------------|
 | `Qwen/Qwen3-1.7B` | ~3.4 GB | ~5 GB | Quick smoke tests. Too small to use as a scoring judge |
-| `Qwen/Qwen3-4B` | ~8 GB | ~10 GB | External rerank judge (validated on oregano DT) |
+| `Qwen/Qwen3-4B` | ~8 GB | ~10 GB | External rerank judge (validated on oregano DT personas) |
 | `Qwen/Qwen3.5-9B` | ~18 GB | ~20 GB | Training / in-loop reward signal (~32 GB VRAM) |
 
 When `viz_mode=1`, the local LLM is forced to `Qwen/Qwen3-4B` regardless of `--local_model`, and only the final explanation JSON is saved (no metrics or logs). Useful for generating a handful of explanations on a light GPU / CPU.

@@ -1,0 +1,6 @@
+{
+  "best_step": 40,
+  "threshold": 0.5,
+  "timestamp": 1777928371.583882,
+  "model_path": "saved_models/oregano/drug_target/mechanistic_analyst/model.ckpt"
+}

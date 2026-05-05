@@ -78,7 +78,7 @@ Hits@10:  0.3132
 Hits@20:  0.3909
 MRR:  0.1580
 
-Test (beam) scores with best model from output/neutral_matrix/hetionet__drug_target__neutral_evaluator/rep4//03-05_17:09:16/model/
+Test (beam) scores with best model
 Hits@1:  0.1178
 Hits@3:  0.2368
 Hits@5:  0.3163

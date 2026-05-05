@@ -78,7 +78,7 @@ Hits@10:  0.4876
 Hits@20:  0.5702
 MRR:  0.2737
 
-Test (beam) scores with best model from output/hetionet/drug_repurposing/mechanistic_analyst/02-04_19:31:51/model/
+Test (beam) scores with best model
 Hits@1:  0.3179
 Hits@3:  0.4371
 Hits@5:  0.5430

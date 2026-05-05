@@ -46,7 +46,7 @@ Hits@10:  0.3793
 Hits@20:  0.4483
 MRR:  0.2022
 
-Test (beam) scores with best model from output/oregano/drug_repurposing/insight_driven//27-04_20:11:21/model/
+Test (beam) scores with best model
 Hits@1:  0.2063
 Hits@3:  0.2698
 Hits@5:  0.3492

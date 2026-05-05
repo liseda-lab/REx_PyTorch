@@ -70,7 +70,8 @@ Hits@10:  0.4628
 Hits@20:  0.5289
 MRR:  0.2859
 
-Test (beam) scores with best model 
+Test (beam) scores with best model
+Hits@1:  0.3245
 Hits@3:  0.4768
 Hits@5:  0.5298
 Hits@10:  0.6291

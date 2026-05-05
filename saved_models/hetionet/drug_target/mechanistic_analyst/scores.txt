@@ -86,7 +86,7 @@ Hits@10:  0.3189
 Hits@20:  0.3745
 MRR:  0.1801
 
-Test (beam) scores with best model from output/persona_runs/hetionet_dt/mechanistic//03-05_18:54:36/model/
+Test (beam) scores with best model
 Hits@1:  0.1337
 Hits@3:  0.2409
 Hits@5:  0.3060

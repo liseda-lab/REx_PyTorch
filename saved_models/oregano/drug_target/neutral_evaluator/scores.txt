@@ -54,7 +54,7 @@ Hits@10:  0.4457
 Hits@20:  0.5326
 MRR:  0.2484
 
-Test (beam) scores with best model from output/neutral_matrix/oregano__drug_target__neutral_evaluator/rep4//03-05_17:22:16/model/
+Test (beam) scores with best model
 Hits@1:  0.1832
 Hits@3:  0.3252
 Hits@5:  0.4052

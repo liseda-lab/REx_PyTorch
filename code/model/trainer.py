@@ -1148,6 +1148,51 @@ if __name__ == '__main__':
 
     trainer.test(beam = True, print_paths = True, save_model = False)
 
+    # External rerank: when --external_rerank=1 (and persona scoring is on),
+    # run the post-test batched LLM rerank on the saved paths.json. Typical
+    # usage pairs this with --no_llm_rerank=1 (skip in-loop scoring) so the
+    # test phase is fast and the rerank runs once at the end with cross-pair
+    # batches and a (possibly lighter) judge model. See
+    # code/model/score_external.py for the scorer + failure fallback.
+    if options.get('external_rerank') and options.get('agentic_ai_enabled'):
+        try:
+            from score_external import score_paths_external, get_call_llm, apply_failure_fallback
+            json_path = trainer.path_logger_file_ + ".json"
+            test_data_file = os.path.join(options['data_input_dir'], 'test.txt')
+            caller = get_call_llm()
+            if caller is None:
+                logger.warning("[RERANK] No LLM backend available; skipping post-test rerank.")
+            elif not os.path.exists(json_path):
+                logger.warning(f"[RERANK] paths.json not found at {json_path}; skipping.")
+            else:
+                rerank_alpha = float(options.get('rerank_alpha', 0.5))
+                logger.info(f"[RERANK] Starting post-test LLM rerank on {json_path} "
+                            f"(threshold={test_threshold:.2f}, alpha={rerank_alpha}, "
+                            f"backend={os.getenv('RERANK_BACKEND', 'local')})")
+                score_paths_external(
+                    json_path=json_path,
+                    persona_path=options['persona_path'],
+                    threshold=float(test_threshold),
+                    alpha=rerank_alpha,
+                    call_llm=caller,
+                    test_data_path=test_data_file if os.path.exists(test_data_file) else None,
+                    logger=logger,
+                )
+                # Post-rerank: replace LLM-failed paths' final_score with a
+                # data-driven fallback (mean of successful agentic_scores in
+                # this run) so they don't unfairly outrank LLM-judged-mediocre
+                # neighbours. Strategy overridable via env var.
+                fallback_strategy = os.getenv('RERANK_FALLBACK_STRATEGY', 'mean')
+                logger.info(f"[FALLBACK] Applying post-rerank failure fallback (strategy={fallback_strategy})")
+                apply_failure_fallback(
+                    json_path=json_path,
+                    alpha=rerank_alpha,
+                    strategy=fallback_strategy,
+                    logger=logger,
+                )
+        except Exception as e:
+            logger.exception(f"[RERANK] Post-test rerank failed: {e}")
+
     # Erase empty folders in path_logger_file
     if os.path.isdir(path_logger_file):
         for subfolder in os.listdir(path_logger_file):

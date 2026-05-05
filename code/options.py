@@ -61,6 +61,12 @@ def read_options():
                         help="UI visualization mode: only produce the JSON output (1 = on, 0 = off)")
     parser.add_argument("--skip_lca", default=0, type=int,
                         help="Skip LCA (lowest common ancestor) computation at test time for speed (1 = skip, 0 = compute)")
+    parser.add_argument("--no_llm_rerank", default=0, type=int,
+                        help="Skip per-batch LLM scoring during test() so the test loop runs at neutral pace. paths.json is written with final_score = ic_mean. NO rerank happens, in-loop or external. Combine with --external_rerank=1 to also trigger the post-test batched rerank. (1 = on, 0 = off)")
+    parser.add_argument("--external_rerank", default=0, type=int,
+                        help="After test() completes, run a post-test batched LLM rerank on the saved paths.json (cross-pair batches, resumable, with data-driven failure fallback). Independent of --no_llm_rerank: typical use is --no_llm_rerank=1 + --external_rerank=1 for a fast test plus a lighter-model rerank. (1 = on, 0 = off)")
+    parser.add_argument("--rerank_alpha", default=0.5, type=float,
+                        help="Blend weight for the external rerank: final_score = alpha*ic_mean + (1-alpha)*llm_norm. Only used when --external_rerank=1.")
 
     
     try:
@@ -81,6 +87,8 @@ def read_options():
     parsed['llm_api'] = (parsed['llm_api'] == 1)
     parsed['viz_mode'] = (parsed['viz_mode'] == 1)
     parsed['skip_lca'] = (parsed['skip_lca'] == 1)
+    parsed['no_llm_rerank'] = (parsed['no_llm_rerank'] == 1)
+    parsed['external_rerank'] = (parsed['external_rerank'] == 1)
 
     # In viz_mode, force lightweight local LLM
     if parsed['viz_mode']:

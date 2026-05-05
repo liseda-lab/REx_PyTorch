@@ -65,13 +65,64 @@ For local mode, the `--local_model` parameter controls which model is loaded (de
 
 | Model | Download Size | RAM/VRAM | Recommended for |
 |-------|--------------|----------|-----------------|
-| `Qwen/Qwen3-1.7B` | ~3.4 GB | ~5 GB | Quick testing on CPU |
-| `Qwen/Qwen3-4B` | ~8 GB | ~10 GB | Testing on light GPU |
-| `Qwen/Qwen3.5-9B` | ~18 GB | ~20 GB | Training (needs powerful GPU with around 32GB of VRAM) |
+| `Qwen/Qwen3-1.7B` | ~3.4 GB | ~5 GB | Quick smoke tests on CPU. Not recommended as a scoring judge — too small for reliable persona discrimination on a 1-5 scale and tends to drop items in batched JSON output |
+| `Qwen/Qwen3-4B` | ~8 GB | ~10 GB | Testing on light GPU; **recommended judge for the external rerank** — validated end-to-end on oregano drug-target with mechanistic and insight personas |
+| `Qwen/Qwen3.5-9B` | ~18 GB | ~20 GB | Training (in-loop reward signal); needs a powerful GPU with around 32 GB of VRAM. Used for our reported training runs |
 
-The parameter viz_mode changes the default mode to `Qwen/Qwen3-4B` and only saves a final json with the generated explanations without any scores, metrics or logs. This is useful for testing few explanations at a time and for generating explanations on CPU (not advised for training). 
+When `viz_mode=1`, the local LLM is **forced to `Qwen/Qwen3-4B`** (overriding `--local_model`, even if a config sets a larger model), and only the final explanation JSON is saved — no metrics, no scores, no logs. This is useful for generating a handful of explanations at a time, or for running on a light GPU / CPU. Not advised for training.
 
 No account or token is needed as the models are open source and download freely. Training was done using an RTX 5090 GPU. For API-based LLM calls, execution can be achieved on any system, even without a GPU.
+
+### Test-time scoring modes
+
+When `--agentic_ai_enabled=1`, two flags control how/when the persona LLM scores paths during/after the test phase. They are independent and the defaults reproduce the original in-loop behavior, so existing configs are unaffected.
+
+| `--no_llm_rerank` | `--external_rerank` | What happens during test() | Use case |
+|:---:|:---:|---|---|
+| `0` (default) | `0` (default) | Each batch calls the LLM inline; paths.json is written once at the end with the IC+LLM blend already applied | Default behavior. Single-shot runs, backward-compatible |
+| `1` | `0` | Test loop skips all LLM calls. paths.json has `final_score = ic_mean` only. No rerank, in-loop or external | Pure performance / metrics only — when persona scoring isn't needed |
+| `1` | `1` | Test loop skips all LLM calls. After test() completes, a post-test batched rerank scores high-IC paths cross-pair, with a possibly lighter `--local_model`, then re-sorts each pair | Slow runs (long test sets, big personas like oregano DT). Lets you swap personas/models without re-running the test loop |
+
+The external rerank exposes a few extra knobs:
+
+| Flag / env var | Default | Effect |
+|----------------|---------|--------|
+| `--rerank_alpha` | `0.5` | Weight for IC in the blend: `final_score = alpha*ic_mean + (1-alpha)*llm_norm` |
+| `RERANK_CHECKPOINT_EVERY` | `25` | After every N batches the scorer atomically rewrites paths.json. The pass is resumable: paths with `agentic_score` already set are skipped on resume |
+| `RERANK_FALLBACK_STRATEGY` | `mean` | When the LLM returns unparseable JSON for a batch, those paths are filled in after the run with the `mean` (default) or `median` of the actual successful agentic_scores — so failed paths don't unfairly outrank LLM-judged-mediocre ones |
+| `RERANK_BACKEND` | `local` | Set to `ollama` and provide `RERANK_OLLAMA_MODEL=<tag>` to use Ollama's OpenAI-compatible endpoint instead of the in-process `--local_model` |
+
+**Models we validated this with:** training and in-loop scoring with `Qwen/Qwen3.5-9B`; external rerank with `Qwen/Qwen3-4B`. Both run locally (`--llm_api 0`). Smaller judges (e.g. `Qwen/Qwen3-1.7B`) are **not** recommended — they collapse calibration on a 1-5 scale and drop items in 50-object JSON batches, so the LLM contribution to `final_score` becomes near-constant and the rerank loses its signal.
+
+**Test-time IC threshold behavior (important):** the threshold that decides which paths cross into "high_ic" (and get LLM-scored) depends on the mode:
+
+* **In-loop scoring** (`--external_rerank=0`, the default): test() uses the model's actual training threshold at `best_step` — the same value the policy was rewarded against during training. No floor. Faithful to training, but if `best_step` is early in the curriculum (early stopping at threshold ~0.40), in-loop test will be **noticeably slower** than before because more paths qualify for LLM scoring.
+* **External rerank** (`--external_rerank=1`): the threshold is floored at `0.65` (or the curriculum value at `best_step`, whichever is higher). The floor lives here because the rerank is the "make it efficient" mode and the cheap path is what matters for long test sets.
+
+If you previously relied on the old hard-coded 0.65 floor for in-loop test speed, set `external_rerank=1` (and likely `no_llm_rerank=1`) on those configs to get the floor back.
+
+**Recommended cost-sensitive workflow:** train with the larger model so the in-loop reward signal is high quality, then test+rerank with a smaller one for speed. Two separate `uv run` invocations sharing the same checkpoint:
+
+```sh
+# Phase 1: train (in-loop LLM scoring needed for the reward signal)
+uv run bash run.sh configs/oregano/drug_target/train_mechanistic.sh
+#   load_model=0   no_llm_rerank=0   external_rerank=0   local_model="Qwen/Qwen3.5-9B"
+
+# Phase 2: test + external rerank, loading the trained checkpoint
+uv run bash run.sh configs/oregano/drug_target/test_mechanistic.sh
+#   load_model=1   no_llm_rerank=1   external_rerank=1   local_model="Qwen/Qwen3-4B"
+#   model_load_dir=output/.../mechanistic/<run_timestamp>/model/best_ckpt.json
+```
+
+You can also run the rerank standalone against any existing paths.json (e.g. to swap personas without re-running the test loop):
+
+```sh
+uv run python code/model/score_external.py \
+    output/.../<run>/test_beam/paths.json \
+    personas/<persona>.txt \
+    0.65 0.5 \
+    datasets/.../test.txt
+```
 
 
 ### Authors

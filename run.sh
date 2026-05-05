@@ -17,7 +17,11 @@ cmd="python code/model/trainer.py --base_output_dir $base_output_dir \
     --IC_reward ${IC_reward:-1} --early_stopping $early_stopping \
     --agentic_ai_enabled $agentic_ai_enabled  --persona_path $persona_path \
     --viz_mode ${viz_mode:-0} \
-    --skip_lca ${skip_lca:-0}"
+    --skip_lca ${skip_lca:-0} \
+    --no_llm_rerank ${no_llm_rerank:-0} \
+    --external_rerank ${external_rerank:-0} \
+    --rerank_alpha ${rerank_alpha:-0.5} \
+    --local_model ${local_model:-Qwen/Qwen3.5-9B}"
 
 echo "Executing $cmd"
 

@@ -1137,14 +1137,26 @@ if __name__ == '__main__':
     # Make the threshold logic in Episode use this step
     Episode.set_training_step(best_step)
 
-    # Floor the test-time LLM threshold at 0.65 (or curriculum value if higher).
-    # Avoids re-running the LLM on weak high-IC paths when best_step came from
-    # an early curriculum stage. ADDEx keeps the curriculum threshold because
-    # it scores one pair at a time.
-    test_threshold = max(0.65, threshold_for_step(best_step))
+    # Test-time LLM threshold:
+    #   * In-loop scoring (default, --external_rerank=0): use the model's actual
+    #     curriculum threshold at best_step. Faithful to what the policy was
+    #     trained against. Can be slow if best_step is early (low threshold ->
+    #     many paths sent to the LLM each batch).
+    #   * External rerank (--external_rerank=1): floor at 0.65 so the post-test
+    #     batched rerank stays cheap on long test sets. The rerank is the
+    #     "make it efficient" mode, so the floor lives there.
+    # ADDEx keeps the curriculum threshold either way because it scores one
+    # pair at a time.
+    curriculum_threshold = threshold_for_step(best_step)
+    if options.get('external_rerank'):
+        test_threshold = max(0.65, curriculum_threshold)
+        logger.info(f"[TEST] external_rerank=1; LLM threshold floored to {test_threshold:.2f} "
+                    f"(curriculum was {curriculum_threshold:.2f})")
+    else:
+        test_threshold = curriculum_threshold
+        logger.info(f"[TEST] in-loop scoring; using curriculum threshold {test_threshold:.2f} "
+                    f"at best_step={best_step} (no floor applied)")
     Episode.set_test_threshold_override(test_threshold)
-    logger.info(f"[TEST] LLM threshold floored to {test_threshold:.2f} "
-                f"(curriculum was {threshold_for_step(best_step):.2f})")
 
     trainer.test(beam = True, print_paths = True, save_model = False)
 

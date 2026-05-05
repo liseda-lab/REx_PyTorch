@@ -94,6 +94,13 @@ The external rerank exposes a few extra knobs:
 
 **Models we validated this with:** training and in-loop scoring with `Qwen/Qwen3.5-9B`; external rerank with `Qwen/Qwen3-4B`. Both run locally (`--llm_api 0`). Smaller judges (e.g. `Qwen/Qwen3-1.7B`) are **not** recommended — they collapse calibration on a 1-5 scale and drop items in 50-object JSON batches, so the LLM contribution to `final_score` becomes near-constant and the rerank loses its signal.
 
+**Test-time IC threshold behavior (important):** the threshold that decides which paths cross into "high_ic" (and get LLM-scored) depends on the mode:
+
+* **In-loop scoring** (`--external_rerank=0`, the default): test() uses the model's actual training threshold at `best_step` — the same value the policy was rewarded against during training. No floor. Faithful to training, but if `best_step` is early in the curriculum (early stopping at threshold ~0.40), in-loop test will be **noticeably slower** than before because more paths qualify for LLM scoring.
+* **External rerank** (`--external_rerank=1`): the threshold is floored at `0.65` (or the curriculum value at `best_step`, whichever is higher). The floor lives here because the rerank is the "make it efficient" mode and the cheap path is what matters for long test sets.
+
+If you previously relied on the old hard-coded 0.65 floor for in-loop test speed, set `external_rerank=1` (and likely `no_llm_rerank=1`) on those configs to get the floor back.
+
 **Recommended cost-sensitive workflow:** train with the larger model so the in-loop reward signal is high quality, then test+rerank with a smaller one for speed. Two separate `uv run` invocations sharing the same checkpoint:
 
 ```sh
